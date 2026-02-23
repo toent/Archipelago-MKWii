@@ -21,7 +21,7 @@ presently, Archipelago is also the randomizer itself.
 8. The client includes a text client and tracker window, they will open automatically.
 
 ### Good to know:
-* The client might not connect to dolphin properly sometimes eventhough some text says it is, use `/status` in the text client to check for connection or check the tracker window.
+* The client might not connect to dolphin properly sometimes eventhough some text says it is, use `/status` in the text client to check for connection or check the tracker window. To fix this, just restart the client and try again.
 * When generating with the `mkwii.apworld` make sure to keep `include_race_checks` and `enable_mid_race_memory_features` set to __False__ in your YAML, the options are just there for future development, but have no place yet in the client and __will not be unlockable__.
 * Do __NOT__ use the speedup feature included in Dolphin as it has been known to skip over checks.
 * In the current version trap or filler items do not do anything yet. There is plans for them for later.
