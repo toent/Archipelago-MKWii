@@ -22,7 +22,7 @@ import dolphin_memory_engine as dme
 
 logger = logging.getLogger("MKWii.Memory")
 
-# -- PAL memory addresses --
+# PAL memory addresses
 
 SYSTEM_MANAGER_PTR = 0x809BD748
 RAW_SAVE_OFFSET = 0x14
