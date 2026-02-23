@@ -409,7 +409,6 @@ class DolphinMemoryManager:
                 pass
 
     # GP result reading
-
     def _gp_cup_addr(self, cup_id: int, cc: str) -> Optional[int]:
         cc_offset = GP_CC_OFFSETS.get(cc)
         if cc_offset is None:
