@@ -47,17 +47,15 @@ GP_CC_OFFSETS: Dict[str, int] = {
     "Mirror": 0x900,
 }
 
-# -- Unlock bit tables --
+# Unlock bit tables
 # Each entry: (absolute_offset_from_license_start, bit_index)
-# None = always-available item (no save bit)
-
 CHARACTER_IDS: Dict[str, Optional[Tuple[int, int]]] = {
     "Baby Daisy":   (0x003B, 2),
     "Baby Luigi":   (0x003B, 3),
     "Dry Bones":    (0x003B, 0),
     "Bowser Jr.":   (0x003B, 5),
     "Toadette":     (0x003B, 1),
-    "King Boo":     (0x003A, 1),  # Was swapped with Star Cup 50cc — verified via playtest
+    "King Boo":     (0x003A, 1),
     "Dry Bowser":   (0x003A, 0),
     "Funky Kong":   (0x003A, 2),
     "Rosalina":     (0x003A, 3),
@@ -71,49 +69,37 @@ CHARACTER_IDS: Dict[str, Optional[Tuple[int, int]]] = {
 VEHICLE_IDS: Dict[str, Optional[Tuple[int, int]]] = {
     # Unlockable karts (PAL primary name first, US alias follows)
     "Turbo Blooper":   (0x003F, 5),
-    "Super Blooper":   (0x003F, 5),   # US alias
+    # "Super Blooper":   (0x003F, 5),   # US alias
     "Cheep Charger":   (0x003F, 2),
     "Royal Racer":     (0x003F, 6),
-    "Daytripper":      (0x003F, 6),   # US alias
+    # "Daytripper":      (0x003F, 6),   # US alias
     "Blue Falcon":     (0x003F, 4),
     "Rally Romper":    (0x003F, 3),
-    "Tiny Titan":      (0x003F, 3),   # US alias
+    # "Tiny Titan":      (0x003F, 3),   # US alias
     "B. Dasher Mk 2":  (0x003F, 7),
     "B Dasher Mk 2":   (0x003F, 7),
-    "Sprinter":        (0x003F, 7),   # US alias
-    "Dragonetti":      (0x003E, 2),  # Was swapped with Aero Glider — verified via playtest
-    "Honeycoupe":      (0x003E, 2),   # US alias
-    "Aero Glider":     (0x003E, 1),  # Was swapped with Dragonetti — verified via playtest
-    "Jetsetter":       (0x003E, 1),   # US alias
+    # "Sprinter":        (0x003F, 7),   # US alias
+    "Dragonetti":      (0x003E, 2),
+    # "Honeycoupe":      (0x003E, 2),   # US alias
+    "Aero Glider":     (0x003E, 1),
+    # "Jetsetter":       (0x003E, 1),   # US alias
     "Piranha Prowler": (0x003E, 0),
     # Unlockable bikes
     "Magicruiser":     (0x003E, 4),
-    "Magikruiser":     (0x003E, 4),   # US alias
+    # "Magikruiser":     (0x003E, 4),   # US alias
     "Twinkle Star":    (0x003D, 1),
-    "Shooting Star":   (0x003D, 1),   # US alias
+    # "Shooting Star":   (0x003D, 1),   # US alias
     "Rapide":          (0x003E, 6),
-    "Zip Zip":         (0x003E, 6),   # US alias
+    # "Zip Zip":         (0x003E, 6),   # US alias
     "Nitrocycle":      (0x003E, 7),
-    "Sneakster":       (0x003E, 7),   # US alias
+    # "Sneakster":       (0x003E, 7),   # US alias
     "Quacker":         (0x003E, 3),
     "Dolphin Dasher":  (0x003D, 0),
     "Bubble Bike":     (0x003E, 5),
-    "Jet Bubble":      (0x003E, 5),   # US alias
+    # "Jet Bubble":      (0x003E, 5),   # US alias
     "Phantom":         (0x003D, 3),
     "Torpedo":         (0x003D, 2),
-    "Spear":           (0x003D, 2),   # US alias
-    # Starting vehicles (no save bit)
-    "Standard Kart S": None, "Standard Kart M": None, "Standard Kart L": None,
-    "Standard Bike S": None, "Standard Bike M": None, "Standard Bike L": None,
-    "Baby Booster": None, "Booster Seat": None,
-    "Nostalgia 1": None, "Classic Dragster": None,
-    "Wild Wing": None, "Concerto": None,
-    "Offroader": None, "Mini Beast": None, "Flame Flyer": None,
-    "Bullet Bike": None, "Mach Bike": None,
-    "Nanobike": None, "Bit Bike": None,
-    "Bon Bon": None, "Sugarscoot": None,
-    "Bowser Bike": None, "Flame Runner": None,
-    "Wario Bike": None,
+    # "Spear":           (0x003D, 2),   # US alias
 }
 
 CUP_UNLOCK_IDS: Dict[str, Tuple[int, int]] = {
@@ -153,7 +139,6 @@ ALL_UNLOCK_IDS.update(CUP_UNLOCK_IDS)
 ALL_UNLOCK_IDS.update(MODE_IDS)
 
 # Cup/GP tables
-
 CUP_TROPHY_IDS: Dict[str, int] = {
     "Mushroom Cup": 0, "Flower Cup": 1, "Star Cup": 2, "Special Cup": 3,
     "Shell Cup": 4, "Banana Cup": 5, "Leaf Cup": 6, "Lightning Cup": 7,
@@ -191,7 +176,6 @@ def get_vehicle_alternates(vehicle_name: str) -> Set[str]:
 
 
 # Dolphin Memory Manager
-
 class DolphinMemoryManager:
     """Reads and writes MKWii game state via Dolphin's memory interface."""
 
@@ -351,7 +335,7 @@ class DolphinMemoryManager:
         self._runtime_base = None
         self._save_buffer_base = None
 
-    # -- Unlock read/write --
+    # Unlock read/write
 
     def _runtime_addr(self, abs_offset: int) -> int:
         """Convert an absolute save offset (0x0038-0x003F) to a runtime address."""
@@ -424,7 +408,7 @@ class DolphinMemoryManager:
             except Exception:
                 pass
 
-    # -- GP result reading --
+    # GP result reading
 
     def _gp_cup_addr(self, cup_id: int, cc: str) -> Optional[int]:
         cc_offset = GP_CC_OFFSETS.get(cc)
@@ -465,7 +449,7 @@ class DolphinMemoryManager:
             logger.error(f"Error reading GP result for cup {cup_id} {cc}: {e}")
             return ("none", "D")
 
-    # -- Helpers --
+    # Helpers
 
     def _warn_once(self, key: str, msg: str) -> None:
         if not self._suppress_warnings.get(key):
