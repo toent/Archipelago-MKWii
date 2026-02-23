@@ -52,7 +52,44 @@ class DolphinManager:
         self._game_app = None
         self._game_window = None
         self.keyboard = Controller()
-        self.HOTKEYS_PATH = os.path.join(self.get_dolphin_user_dir(), "Config", "Hotkeys.ini")
+
+        userDir = self.get_dolphin_user_dir()
+        if not userDir or userDir == "":
+            self.hotkeys_path = self.select_hotkeys_ini()
+        else:
+            self.hotkeys_path = os.path.join(userDir, "Config", "Hotkeys.ini")
+
+    def select_hotkeys_ini(self) -> str:
+        """Prompt user to select Hotkeys.ini if not found."""
+        if os.path.isfile(self.hotkeys_path):
+            return self.hotkeys_path
+
+        print("Hotkeys.ini not found in expected location:")
+        print(f"  {self.hotkeys_path}")
+        print("Please select your Hotkeys.ini file to continue.")
+
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes("-topmost", True)
+            path = filedialog.askopenfilename(
+                title="Select Hotkeys.ini",
+                filetypes=[("INI files", "Hotkeys.ini"), ("All files", "*.*")],
+            )
+            root.destroy()
+            if path and os.path.isfile(path):
+                self.hotkeys_path = path
+                return path
+        except Exception as e:
+            logger.error(f"File dialog failed: {e}")
+            path = input("Enter path to Hotkeys.ini: ").strip().strip('"')
+            if path and os.path.isfile(path):
+                self.hotkeys_path = path
+                return path
+        return None
 
     # Dolphin hotkey binding handling
 
@@ -80,7 +117,7 @@ class DolphinManager:
     def get_slot1_bindings(self) -> tuple[list, list]:
         """Read Hotkeys.ini and return (load_keys, save_keys) for slot 1."""
         config = configparser.ConfigParser()
-        config.read(self.HOTKEYS_PATH)
+        config.read(self.hotkeys_path)
 
         section = config["Hotkeys"]
         
@@ -131,7 +168,7 @@ class DolphinManager:
 
     # Path discovery
 
-    def get_dolphin_user_dir(self) -> Optional[str]:
+    def get_dolphin_user_dir(self) -> str:
         if self._dolphin_user_dir:
             return self._dolphin_user_dir
 
@@ -144,12 +181,12 @@ class DolphinManager:
         if custom and os.path.isdir(custom):
             self._dolphin_user_dir = custom
             return custom
-        return None
+        return ""
 
     def get_savestate_slot_path(self, slot: int = SAVESTATE_SLOT) -> Optional[str]:
         user_dir = self.get_dolphin_user_dir()
         if not user_dir:
-            return None
+            return ""
         return os.path.join(user_dir, "StateSaves", f"{GAME_ID}.s{slot:02d}")
 
     def get_bundled_savestate_path(self) -> str:
@@ -170,7 +207,7 @@ class DolphinManager:
             self.config["iso_path"] = path
             self._save_config()
             return path
-        return None
+        return ""
 
     def _pick_iso_dialog(self) -> Optional[str]:
         try:
@@ -188,11 +225,11 @@ class DolphinManager:
                 ],
             )
             root.destroy()
-            return path or None
+            return path or ""
         except Exception as e:
             logger.error(f"File dialog failed: {e}")
             path = input("Enter path to MKWii PAL ISO: ").strip().strip('"')
-            return path or None
+            return path or ""
 
     # Dolphin launch
     def find_dolphin_exe(self) -> Optional[str]:
