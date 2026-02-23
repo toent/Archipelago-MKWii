@@ -52,7 +52,7 @@ class DolphinManager:
         self._game_app = None
         self._game_window = None
         self.keyboard = Controller()
-        self.HOTKEYS_PATH = os.path.join(self.get_dolphin_user_dir(),"Config","Hotkeys.ini")
+        self.HOTKEYS_PATH = os.path.join(self.get_dolphin_user_dir(), "Config", "Hotkeys.ini")
 
     # Dolphin hotkey binding handling
 
