@@ -64,7 +64,6 @@ Output Logs/
 /data/user.kv
 /datapackage
 /datapackage_export.json
-/custom_worlds
 # stubgen output
 /out/
 
@@ -198,3 +197,6 @@ _speedups.html
 .LSOverride
 Thumbs.db
 [Dd]esktop.ini
+
+# MKWii AP
+mkwii_ap_config.json
