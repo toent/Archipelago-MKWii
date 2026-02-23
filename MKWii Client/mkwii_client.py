@@ -467,6 +467,7 @@ class MKWiiContext(CommonContext):
 
                 await self.check_locations()
                 await self._block_vanilla_unlocks()
+                # await self._check_goal()
 
             except asyncio.CancelledError:
                 break
@@ -669,8 +670,24 @@ class MKWiiContext(CommonContext):
         count = 0
         for cup in CUPS:
             achieved = self.completed_locations.get((cup, goal_cc), "none")
-            if achieved in TIER_HIERARCHY and TIER_HIERARCHY.index(achieved) >= goal_idx:
-                count += 1
+            if achieved in TIER_HIERARCHY:
+                achieved_idx = TIER_HIERARCHY.index(achieved)
+
+                if achieved_idx >= goal_idx:
+                    # Verify all lower tiers are also completed
+                    valid_progression = True
+                    for lower_idx in range(achieved_idx):
+                        lower_tier = TIER_HIERARCHY[lower_idx]
+                        if self.completed_locations.get((cup, goal_cc)) != lower_tier and \
+                        TIER_HIERARCHY.index(
+                            self.completed_locations.get((cup, goal_cc), "none")
+                        ) < lower_idx:
+                            valid_progression = False
+                            break
+
+                    if valid_progression:
+                        count += 1
+                    
 
         if count >= required:
             self.goal_reached = True
