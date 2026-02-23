@@ -3,94 +3,30 @@
 Archipelago provides a generic framework for developing multiworld capability for game randomizers. In all cases,
 presently, Archipelago is also the randomizer itself.
 
-Currently, the following games are supported:
+## MKWii
+### Things you will need:
+* An __unmodified PAL__ Mario Kart Wii ROM
+* [Python 3.13.12](https://www.python.org/downloads/release/python-31312/) (Other Python versions might work, but do so at your own risk)
+* [Dolphin 2512](https://dolphin-emu.org/download/release/2512/) (Dolphin 5 or higher is the minimum)
+* Latest MKWii Client and APWorld Release
 
-* The Legend of Zelda: A Link to the Past
-* Factorio
-* Subnautica
-* Risk of Rain 2
-* The Legend of Zelda: Ocarina of Time
-* Timespinner
-* Super Metroid
-* Secret of Evermore
-* Final Fantasy
-* VVVVVV
-* Raft
-* Super Mario 64
-* Meritous
-* Super Metroid/Link to the Past combo randomizer (SMZ3)
-* ChecksFinder
-* Hollow Knight
-* The Witness
-* Sonic Adventure 2: Battle
-* Starcraft 2
-* Donkey Kong Country 3
-* Dark Souls 3
-* Super Mario World
-* Pokémon Red and Blue
-* Hylics 2
-* Overcooked! 2
-* Zillion
-* Lufia II Ancient Cave
-* Blasphemous
-* Wargroove
-* Stardew Valley
-* The Legend of Zelda
-* The Messenger
-* Kingdom Hearts 2
-* The Legend of Zelda: Link's Awakening DX
-* Adventure
-* DLC Quest
-* Noita
-* Undertale
-* Bumper Stickers
-* Mega Man Battle Network 3: Blue Version
-* Muse Dash
-* DOOM 1993
-* Terraria
-* Lingo
-* Pokémon Emerald
-* DOOM II
-* Shivers
-* Heretic
-* Landstalker: The Treasures of King Nole
-* Final Fantasy Mystic Quest
-* TUNIC
-* Kirby's Dream Land 3
-* Celeste 64
-* Castlevania 64
-* A Short Hike
-* Yoshi's Island
-* Mario & Luigi: Superstar Saga
-* Bomb Rush Cyberfunk
-* Aquaria
-* Yu-Gi-Oh! Ultimate Masters: World Championship Tournament 2006
-* A Hat in Time
-* Old School Runescape
-* Kingdom Hearts 1
-* Mega Man 2
-* Yacht Dice
-* Faxanadu
-* Saving Princess
-* Castlevania: Circle of the Moon
-* Inscryption
-* Civilization VI
-* The Legend of Zelda: The Wind Waker
-* Jak and Daxter: The Precursor Legacy
-* Super Mario Land 2: 6 Golden Coins
-* shapez
-* Paint
-* Celeste (Open World)
-* Choo-Choo Charles
-* APQuest
-* Satisfactory
-* EarthBound
+### Getting Set up:
+1. Install the requirements marked above according to their installers.
+2. Make sure that in Dolphin `Settings > Advanced > Enable Memory Size Override` is unchecked/disabled.
+3. If you have an existing Mario Kart Wii Savefile or Savestates that you care about, __make sure to back them up__.
+4. Run `/MKWii Client/MKWii_Client.bat` (or `/MKWii Client/mkwii_client.py` in a CLI, if you're on linux)
+5. Install required packages (the client will do this automatically after prompting you).
+6. The client will ask for your ROM and your Dolphin make sure to assign them correctly.
+7. Follow other instructions posed by the client and connect to the archipelago.
+8. The client includes a text client and tracker window, they will open automatically.
 
-For setup and instructions check out our [tutorials page](https://archipelago.gg/tutorial/).
-Downloads can be found at [Releases](https://github.com/ArchipelagoMW/Archipelago/releases), including compiled
-windows binaries.
+### Good to know:
+* The client might not connect to dolphin properly sometimes eventhough some text says it is, use `/status` in the text client to check for connection or check the tracker window.
+* When generating with the `mkwii.apworld` make sure to keep `include_race_checks` and `enable_mid_race_memory_features` set to __False__ in your YAML, the options are just there for future development, but have no place yet in the client and __will not be unlockable__.
+* Do __NOT__ use the speedup feature included in Dolphin as it has been known to skip over checks.
+* In the current version trap or filler items do not do anything yet. There is plans for them for later.
 
-## History
+## Arcipelago History
 
 Archipelago is built upon a strong legacy of brilliant hobbyists. We want to honor that legacy by showing it here.
 The repositories which Archipelago is built upon, inspired by, or otherwise owes its gratitude to are:
@@ -108,23 +44,6 @@ path. Just because one person's name may be in a repository title does not mean 
 happen. We can't hope to perfectly cover every single contribution that lead up to Archipelago, but we hope to honor
 them fairly.
 
-### Path to the Archipelago
-
-Archipelago was directly forked from bonta0's `multiworld_31` branch of ALttPEntranceRandomizer (this project has a
-long legacy of its own, please check it out linked above) on January 12, 2020. The repository was then named to
-_MultiWorld-Utilities_ to better encompass its intended function. As Archipelago matured, then known as
-"Berserker's MultiWorld" by some, we found it necessary to transform our repository into a root level repository
-(as opposed to a 'forked repo') and change the name (which came later) to better reflect our project.
-
-## Running Archipelago
-
-For most people, all you need to do is head over to
-the [releases page](https://github.com/ArchipelagoMW/Archipelago/releases), then download and run the appropriate
-installer, or AppImage for Linux-based systems.
-
-If you are a developer or are running on a platform with no compiled releases available, please see our doc on
-[running Archipelago from source](docs/running%20from%20source.md).
-
 ## Related Repositories
 
 This project makes use of multiple other projects. We wouldn't be here without these other repositories and the
@@ -134,15 +53,3 @@ contributions of their developers, past and present.
 * [Enemizer](https://github.com/Ijwu/Enemizer)
 * [Ocarina of Time Randomizer](https://github.com/TestRunnerSRL/OoT-Randomizer)
 
-## Contributing
-
-To contribute to Archipelago, including the WebHost, core program, or by adding a new game, see our
-[Contributing guidelines](/docs/contributing.md).
-
-## FAQ
-
-For Frequently asked questions, please see the website's [FAQ Page](https://archipelago.gg/faq/en/).
-
-## Code of Conduct
-
-Please refer to our [code of conduct](/docs/code_of_conduct.md).
