@@ -26,6 +26,8 @@ presently, Archipelago is also the randomizer itself.
 * When generating with the `mkwii.apworld` make sure to keep `include_race_checks` and `enable_mid_race_memory_features` set to __False__ in your YAML, the options are just there for future development, but have no place yet in the client and __will not be unlockable__.
 * Do __NOT__ use the speedup feature included in Dolphin as it has been known to skip over checks.
 * In the current version trap or filler items do not do anything yet. There is plans for them for later.
+* If you get any directory errors regarding saves or hotkeys, add `"dolphin_user_dir":"Y:/our/Filepath/Dolphin Emulator"` as the next entry in the `mkwii_ap_config.json`.
+    * You can easily find your Dolphin Userdata by opening dolphin right-clicking a game and clicking `Open Wii Save Folder`, and then navigate back until you are in the `Dolphin Emulator` folder (this is the directory the client will need).
 
 ## Arcipelago History
 
