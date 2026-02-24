@@ -177,6 +177,11 @@ class DolphinManager:
             self._dolphin_user_dir = docs
             return docs
 
+        roaming = os.path.join(os.environ.get("APPDATA", ""), "Dolphin Emulator")
+        if os.path.isdir(roaming):
+            self._dolphin_user_dir = roaming
+            return roaming
+
         custom = self.config.get("dolphin_user_dir")
         if custom and os.path.isdir(custom):
             self._dolphin_user_dir = custom
