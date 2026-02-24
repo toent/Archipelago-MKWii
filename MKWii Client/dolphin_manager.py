@@ -52,44 +52,7 @@ class DolphinManager:
         self._game_app = None
         self._game_window = None
         self.keyboard = Controller()
-
-        userDir = self.get_dolphin_user_dir()
-        if not userDir or userDir == "":
-            self.hotkeys_path = self.select_hotkeys_ini()
-        else:
-            self.hotkeys_path = os.path.join(userDir, "Config", "Hotkeys.ini")
-
-    def select_hotkeys_ini(self) -> str:
-        """Prompt user to select Hotkeys.ini if not found."""
-        if os.path.isfile(self.hotkeys_path):
-            return self.hotkeys_path
-
-        print("Hotkeys.ini not found in expected location:")
-        print(f"  {self.hotkeys_path}")
-        print("Please select your Hotkeys.ini file to continue.")
-
-        try:
-            import tkinter as tk
-            from tkinter import filedialog
-
-            root = tk.Tk()
-            root.withdraw()
-            root.attributes("-topmost", True)
-            path = filedialog.askopenfilename(
-                title="Select Hotkeys.ini",
-                filetypes=[("INI files", "Hotkeys.ini"), ("All files", "*.*")],
-            )
-            root.destroy()
-            if path and os.path.isfile(path):
-                self.hotkeys_path = path
-                return path
-        except Exception as e:
-            logger.error(f"File dialog failed: {e}")
-            path = input("Enter path to Hotkeys.ini: ").strip().strip('"')
-            if path and os.path.isfile(path):
-                self.hotkeys_path = path
-                return path
-        return None
+        self.hotkeys_path = os.path.join(self.get_dolphin_user_dir(), "Config", "Hotkeys.ini")
 
     # Dolphin hotkey binding handling
 
