@@ -542,9 +542,9 @@ class MKWiiContext(CommonContext):
 
             # Load savestate to wipe the GP data causing re-derivation
             # """Load the clean savestate and re-apply AP unlocks."""
-            if not self.dolphin_mgr or not self.dolphin_mgr.has_bundled_savestate:
-                self.output("No savestate available")
-                return
+            # if not self.dolphin_mgr or not self.dolphin_mgr.has_bundled_savestate:
+            #     self.output("No savestate available")
+            #     return
             # await self._do_savestate_load("vanilla unlock blocked")
 
         except Exception as e:

@@ -367,8 +367,8 @@ class DolphinManager:
         print("\n  SAVE DATA WARNING")
         print("  " + "-" * 40)
         print("  Loading the AP will overwrite your save with an empty one.")
-        print("  Additionally the included savestate will cause MKWii")
-        print("  to auto-save over your existing save & savestate data.")
+        print("  Additionally the included save will cause MKWii")
+        print("  to auto-save over your existing save data.")
         user_dir = self.get_dolphin_user_dir()
         if user_dir:
             print(f"\n  Save location: {user_dir}")
