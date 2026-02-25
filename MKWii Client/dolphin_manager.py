@@ -12,17 +12,19 @@ import logging
 import os
 import shutil
 import subprocess
+import sys
 import time
 from typing import Optional
 from pynput.keyboard import Key, Controller, KeyCode
+from gecko_manager import inject_gecko_codes
 
 logger = logging.getLogger("MKWii.Dolphin")
 
 GAME_ID = "RMCP01"
 CONFIG_FILENAME = "mkwii_ap_config.json"
-BUNDLED_SAVESTATE = "Saves/Savestate/MKWii_AP_Savestate.sav"
+# BUNDLED_SAVESTATE = "Saves/Savestate/MKWii_AP_Savestate.sav"
 BUNDLED_EMPTY_SAVE = "Saves/Empty Save/rksys.dat"
-SAVESTATE_SLOT = 1
+# SAVESTATE_SLOT = 1
 
 KEY_MAP = {
     "shift": Key.shift,
@@ -44,7 +46,14 @@ class DolphinManager:
     """Manages Dolphin process lifecycle, configuration, and savestate operations."""
     
     def __init__(self) -> None:
-        self._script_dir = os.path.dirname(os.path.abspath(__file__))
+
+        if getattr(sys, 'frozen', False):
+        # Running as PyInstaller exe - use the folder containing the exe
+            self._script_dir = os.path.dirname(sys.executable)
+        else:
+        # Running as normal Python script
+            self._script_dir = os.path.dirname(os.path.abspath(__file__))
+        
         self.config_path = os.path.join(self._script_dir, CONFIG_FILENAME)
         self.config = self._load_config()
         self._dolphin_process: Optional[subprocess.Popen] = None
@@ -55,7 +64,6 @@ class DolphinManager:
         self.hotkeys_path = os.path.join(self.get_dolphin_user_dir(), "Config", "Hotkeys.ini")
 
     # Dolphin hotkey binding handling
-
     def parse_binding(self, raw: str) -> list:
         """Parse a Dolphin binding string into a list of pynput keys."""
         raw = raw.strip().replace("`", "")
@@ -112,7 +120,6 @@ class DolphinManager:
             time.sleep(delay)
 
     # Config file handling
-
     def _load_config(self) -> dict:
         if os.path.exists(self.config_path):
             try:
@@ -151,18 +158,18 @@ class DolphinManager:
             return custom
         return ""
 
-    def get_savestate_slot_path(self, slot: int = SAVESTATE_SLOT) -> Optional[str]:
-        user_dir = self.get_dolphin_user_dir()
-        if not user_dir:
-            return ""
-        return os.path.join(user_dir, "StateSaves", f"{GAME_ID}.s{slot:02d}")
+    # def get_savestate_slot_path(self, slot: int = SAVESTATE_SLOT) -> Optional[str]:
+    #     user_dir = self.get_dolphin_user_dir()
+    #     if not user_dir:
+    #         return ""
+    #     return os.path.join(user_dir, "StateSaves", f"{GAME_ID}.s{slot:02d}")
 
-    def get_bundled_savestate_path(self) -> str:
-        return os.path.join(self._script_dir, BUNDLED_SAVESTATE)
+    # def get_bundled_savestate_path(self) -> str:
+    #     return os.path.join(self._script_dir, BUNDLED_SAVESTATE)
 
-    @property
-    def has_bundled_savestate(self) -> bool:
-        return os.path.isfile(self.get_bundled_savestate_path())
+    # @property
+    # def has_bundled_savestate(self) -> bool:
+    #     return os.path.isfile(self.get_bundled_savestate_path())
 
     # ISO picker
     def get_iso_path(self) -> Optional[str]:
@@ -314,45 +321,46 @@ class DolphinManager:
 
     # Savestate operations
 
-    def load_state(self, slot: int = SAVESTATE_SLOT) -> bool:
-        """Copy the bundled savestate into Dolphin's slot and trigger load via F-key."""
-        bundled = self.get_bundled_savestate_path()
-        ss_path = self.get_savestate_slot_path(slot)
+    # def load_state(self, slot: int = SAVESTATE_SLOT) -> bool:
+    #     """Copy the bundled savestate into Dolphin's slot and trigger load via F-key."""
+    #     bundled = self.get_bundled_savestate_path()
+    #     ss_path = self.get_savestate_slot_path(slot)
 
-        if not os.path.isfile(bundled):
-            logger.error(f"Bundled savestate not found: {bundled}")
-            return False
-        if not ss_path:
-            logger.error("Could not determine savestate slot path")
-            return False
+    #     if not os.path.isfile(bundled):
+    #         logger.error(f"Bundled savestate not found: {bundled}")
+    #         return False
+    #     if not ss_path:
+    #         logger.error("Could not determine savestate slot path")
+    #         return False
 
-        os.makedirs(os.path.dirname(ss_path), exist_ok=True)
+    #     os.makedirs(os.path.dirname(ss_path), exist_ok=True)
 
-        try:
-            shutil.copy2(bundled, ss_path)
-        except Exception as e:
-            logger.error(f"Failed to copy savestate: {e}")
-            return False
+    #     try:
+    #         shutil.copy2(bundled, ss_path)
+    #     except Exception as e:
+    #         logger.error(f"Failed to copy savestate: {e}")
+    #         return False
 
-        if not self.focus_game_window():
-            logger.warning("Could not focus Dolphin window, sending F-key anyway")
+    #     if not self.focus_game_window():
+    #         logger.warning("Could not focus Dolphin window, sending F-key anyway")
 
-        try:
-            load_keys, _ = self.get_slot1_bindings()
-            self.press_combo(load_keys)
-        except Exception as e:
-            logger.error(f"Failed to send slot 1 key combo: {self.get_slot1_bindings()[0]} - {e}")
-            return False
+    #     try:
+    #         load_keys, _ = self.get_slot1_bindings()
+    #         self.press_combo(load_keys)
+    #     except Exception as e:
+    #         logger.error(f"Failed to send slot 1 key combo: {self.get_slot1_bindings()[0]} - {e}")
+    #         return False
 
-        time.sleep(0.5)
-        logger.info(f"Loaded savestate (slot {slot})")
-        return True
+    #     time.sleep(0.5)
+    #     logger.info(f"Loaded savestate (slot {slot})")
+    #     return True
 
     # Backup reminder
 
     def show_backup_reminder(self) -> bool:
         """Prompt user about save data backup. Returns False if user cancels."""
         if not self.config.get("remind_backup", True):
+            inject_gecko_codes(self.get_dolphin_user_dir())
             self.replace_save_with_empty()
             return True
 
@@ -374,6 +382,7 @@ class DolphinManager:
         remind = input("  Show this reminder next time? (y/n): ").strip().lower()
         self.config["remind_backup"] = remind == "y"
         self._save_config()
+        inject_gecko_codes(self.get_dolphin_user_dir())
         self.replace_save_with_empty()
         return True
     
@@ -438,13 +447,13 @@ class DolphinManager:
         result["iso_path"] = iso_path
         print(f"  ISO: {os.path.basename(iso_path)}")
 
-        if self.has_bundled_savestate:
-            size = os.path.getsize(self.get_bundled_savestate_path())
-            print(f"  Savestate: {BUNDLED_SAVESTATE} ({size / 1024 / 1024:.1f} MB)")
-        else:
-            print(f"  Savestate not found: {BUNDLED_SAVESTATE}")
-            print(f"    Expected at: {self.get_bundled_savestate_path()}")
-            return result
+        # if self.has_bundled_savestate:
+        #     size = os.path.getsize(self.get_bundled_savestate_path())
+        #     print(f"  Savestate: {BUNDLED_SAVESTATE} ({size / 1024 / 1024:.1f} MB)")
+        # else:
+        #     print(f"  Savestate not found: {BUNDLED_SAVESTATE}")
+        #     print(f"    Expected at: {self.get_bundled_savestate_path()}")
+        #     return result
 
         if not self.show_backup_reminder():
             return result

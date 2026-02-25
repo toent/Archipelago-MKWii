@@ -1,0 +1,9 @@
+{
+  "game": "Mario Kart Wii",
+  "package_name": "mkwii",
+  "version": 1,
+  "display_name": "Mario Kart Wii",
+  "authors": ["toent"],
+  "description": "Race through Mario Kart Wii cups and tracks in a multiworld randomizer",
+  "requires": []
+}
