@@ -24,14 +24,24 @@ Expected directory layout:
             Saves/
 """
 from __future__ import annotations
+import sys
+import traceback
+
+def _crash_handler(exc_type, exc_value, exc_tb):
+    with open("crash.log", "w") as f:
+        traceback.print_exception(exc_type, exc_value, exc_tb, file=f)
+    traceback.print_exception(exc_type, exc_value, exc_tb)
+
+sys.excepthook = _crash_handler
 
 import asyncio
 import logging
 import os
-import sys
 import time
+import atexit
 from pathlib import Path
 from typing import Dict, Optional, Set, Tuple
+from gecko_manager import disable_gecko_codes
 
 # Resolve imports from parent Archipelago directory
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
@@ -102,21 +112,21 @@ class MKWiiCommandProcessor(ClientCommandProcessor):
         """Manually trigger a location check cycle."""
         asyncio.create_task(self.ctx.check_locations())  # type: ignore[union-attr]
 
-    def _cmd_loadstate(self) -> None:
-        """Load the clean savestate and re-apply AP unlocks."""
-        ctx: MKWiiContext = self.ctx  # type: ignore[assignment]
-        if not ctx.dolphin_mgr or not ctx.dolphin_mgr.has_bundled_savestate:
-            self.output("No savestate available")
-            return
-        asyncio.create_task(ctx._do_savestate_load("manual /loadstate"))
+    # def _cmd_loadstate(self) -> None:
+    #     """Load the clean savestate and re-apply AP unlocks."""
+    #     ctx: MKWiiContext = self.ctx  # type: ignore[assignment]
+    #     if not ctx.dolphin_mgr or not ctx.dolphin_mgr.has_bundled_savestate:
+    #         self.output("No savestate available")
+    #         return
+    #     asyncio.create_task(ctx._do_savestate_load("manual /loadstate"))
 
-    def _cmd_restart(self) -> None:
-        """Restart the connection between the client and Dolphin by loading the clean savestate and rehooking."""
-        ctx: MKWiiContext = self.ctx  # type: ignore[assignment]
-        if not ctx.dolphin_mgr or not ctx.dolphin_mgr.has_bundled_savestate:
-            self.output("No savestate available")
-            return
-        asyncio.create_task(ctx._do_savestate_load("manual /restart"))
+    # def _cmd_restart(self) -> None:
+    #     """Restart the connection between the client and Dolphin by loading the clean savestate and rehooking."""
+    #     ctx: MKWiiContext = self.ctx  # type: ignore[assignment]
+    #     if not ctx.dolphin_mgr or not ctx.dolphin_mgr.has_bundled_savestate:
+    #         self.output("No savestate available")
+    #         return
+    #     asyncio.create_task(ctx._do_savestate_load("manual /restart"))
 
     def _cmd_hook(self) -> None:
         """Force restart the Dolphin hook process (unhook + fresh re-hook)."""
@@ -330,74 +340,74 @@ class MKWiiContext(CommonContext):
 
         return True
 
-    async def _do_savestate_load(self, reason: str) -> bool:
-        """Load the clean savestate, re-hook, and re-apply AP items.
+    # async def _do_savestate_load(self, reason: str) -> bool:
+    #     """Load the clean savestate, re-hook, and re-apply AP items.
 
-        Used for the initial clean start and as the last-resort escalation
-        when bit-level locking can't keep up with the game re-deriving bits.
-        """
-        if not self.dolphin_mgr or not self.dolphin_mgr.has_bundled_savestate:
-            return False
+    #     Used for the initial clean start and as the last-resort escalation
+    #     when bit-level locking can't keep up with the game re-deriving bits.
+    #     """
+    #     if not self.dolphin_mgr or not self.dolphin_mgr.has_bundled_savestate:
+    #         return False
 
-        # Prevent the poll loop from interfering during the load
-        self._loading_state = True
-        self._recently_blocked.clear()
+    #     # Prevent the poll loop from interfering during the load
+    #     self._loading_state = True
+    #     self._recently_blocked.clear()
 
-        try:
-            console_logger.info(f"Loading savestate ({reason})...")
+    #     try:
+    #         console_logger.info(f"Loading savestate ({reason})...")
 
-            # Mark internal pointers as stale but keep DME connected -
-            # Dolphin is the same process, we just need to re-resolve pointers.
-            if self.dolphin:
-                self.dolphin._hooked = False
-                self.dolphin._manager_ptr = None
-                self.dolphin._runtime_base = None
-                self.dolphin._save_buffer_base = None
+    #         # Mark internal pointers as stale but keep DME connected -
+    #         # Dolphin is the same process, we just need to re-resolve pointers.
+    #         if self.dolphin:
+    #             self.dolphin._hooked = False
+    #             self.dolphin._manager_ptr = None
+    #             self.dolphin._runtime_base = None
+    #             self.dolphin._save_buffer_base = None
 
-            self.dolphin_mgr.load_state()
+    #         self.dolphin_mgr.load_state()
 
-            # Dolphin needs time to decompress and apply the savestate.
-            # During active gameplay this takes longer than at boot.
-            await asyncio.sleep(POST_LOAD_SETTLE_SECS)
+    #         # Dolphin needs time to decompress and apply the savestate.
+    #         # During active gameplay this takes longer than at boot.
+    #         await asyncio.sleep(POST_LOAD_SETTLE_SECS)
 
-            # Re-resolve pointers (lightweight - no DME unhook/rehook).
-            # The save system needs time to reinitialize after a state load.
-            for attempt in range(40):
-                if self.dolphin and self.dolphin.resolve_pointers():
-                    break
-                if attempt in (5, 15, 25, 35):
-                    console_logger.info(f"Waiting for save system... (attempt {attempt + 1}/40)")
-                await asyncio.sleep(1.0)
-            else:
-                # resolve_pointers failed - try a full DME rehook as last resort
-                console_logger.info("Pointer resolution failed, trying full DME rehook...")
-                if self.dolphin:
-                    self.dolphin.unhook()
-                for attempt in range(10):
-                    if self.dolphin and self.dolphin.hook():
-                        break
-                    await asyncio.sleep(1.0)
+    #         # Re-resolve pointers (lightweight - no DME unhook/rehook).
+    #         # The save system needs time to reinitialize after a state load.
+    #         for attempt in range(40):
+    #             if self.dolphin and self.dolphin.resolve_pointers():
+    #                 break
+    #             if attempt in (5, 15, 25, 35):
+    #                 console_logger.info(f"Waiting for save system... (attempt {attempt + 1}/40)")
+    #             await asyncio.sleep(1.0)
+    #         else:
+    #             # resolve_pointers failed - try a full DME rehook as last resort
+    #             console_logger.info("Pointer resolution failed, trying full DME rehook...")
+    #             if self.dolphin:
+    #                 self.dolphin.unhook()
+    #             for attempt in range(10):
+    #                 if self.dolphin and self.dolphin.hook():
+    #                     break
+    #                 await asyncio.sleep(1.0)
 
-            if not self.dolphin or not self.dolphin.is_connected:
-                # Don't panic - the poll loop will keep retrying hook()
-                # and will re-apply items once connected.
-                self._needs_post_load_grace = True
-                console_logger.warning(
-                    "Savestate loaded but hook timed out - poll loop will retry automatically. "
-                    "You can also try /hook"
-                )
-                return False
+    #         if not self.dolphin or not self.dolphin.is_connected:
+    #             # Don't panic - the poll loop will keep retrying hook()
+    #             # and will re-apply items once connected.
+    #             self._needs_post_load_grace = True
+    #             console_logger.warning(
+    #                 "Savestate loaded but hook timed out - poll loop will retry automatically. "
+    #                 "You can also try /hook"
+    #             )
+    #             return False
 
-            self._apply_all_received_items()
-            # Set grace period AFTER rehook so it doesn't expire during the loop
-            self._grace_until = time.monotonic() + POST_LOAD_GRACE_SECS
-            console_logger.info("Savestate loaded, AP unlocks re-applied")
-            return True
-        except Exception as e:
-            console_logger.error(f"Error during savestate load: {e}")
-        finally:
-            # Always release the lock so the poll loop can resume
-            self._loading_state = False
+    #         self._apply_all_received_items()
+    #         # Set grace period AFTER rehook so it doesn't expire during the loop
+    #         self._grace_until = time.monotonic() + POST_LOAD_GRACE_SECS
+    #         console_logger.info("Savestate loaded, AP unlocks re-applied")
+    #         return True
+    #     except Exception as e:
+    #         console_logger.error(f"Error during savestate load: {e}")
+    #     finally:
+    #         # Always release the lock so the poll loop can resume
+    #         self._loading_state = False
 
     async def _force_rehook(self) -> None:
         """Force a fresh hook to Dolphin, bypassing initial savestate logic."""
@@ -535,7 +545,7 @@ class MKWiiContext(CommonContext):
             if not self.dolphin_mgr or not self.dolphin_mgr.has_bundled_savestate:
                 self.output("No savestate available")
                 return
-            await self._do_savestate_load("vanilla unlock blocked")
+            # await self._do_savestate_load("vanilla unlock blocked")
 
         except Exception as e:
             console_logger.error(f"Error in vanilla unlock blocking: {e}")
@@ -705,6 +715,21 @@ async def main() -> None:
 
     mgr = DolphinManager()
 
+    # Handle all exit paths: normal exit, Ctrl+C, and CMD window close button
+    def _on_exit():
+        disable_gecko_codes(mgr.get_dolphin_user_dir())
+
+    atexit.register(_on_exit)  # normal exit / Ctrl+C
+
+    try:
+        import win32api
+        def _console_handler(event):
+            _on_exit()
+            return False  # False = let Windows proceed with default handling
+        win32api.SetConsoleCtrlHandler(_console_handler, True)
+    except ImportError:
+        logger.warning("win32api not available, CMD close button may not disable Gecko codes")
+
     iso_path = mgr.config.get("iso_path")
     if iso_path and os.path.exists(iso_path):
         print(f"  ISO: {os.path.basename(iso_path)}")
@@ -716,9 +741,9 @@ async def main() -> None:
             return
         iso_path = setup["iso_path"]
 
-    if not mgr.has_bundled_savestate:
-        print(f"  Savestate not found: {mgr.get_bundled_savestate_path()}")
-        return
+    # if not mgr.has_bundled_savestate:
+    #     print(f"  Savestate not found: {mgr.get_bundled_savestate_path()}")
+    #     return
 
     if not mgr.is_dolphin_running() and iso_path:
         mgr.launch_dolphin(iso_path)
@@ -754,3 +779,4 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         pass
+
