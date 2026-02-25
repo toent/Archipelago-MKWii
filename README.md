@@ -30,6 +30,22 @@ presently, Archipelago is also the randomizer itself.
 * If you get any directory errors regarding saves or hotkeys, add `"dolphin_user_dir":"Y:/our/Filepath/Dolphin Emulator"` as the next entry in the `mkwii_ap_config.json`.
     * You can easily find your Dolphin Userdata by opening dolphin right-clicking a game and clicking `Open Wii Save Folder`, and then navigate back until you are in the `Dolphin Emulator` folder (this is the directory the client will need).
 
+### Current Features:
+#### What features are currently available?
+- Fully completable from start to finish.
+- Character, Cup, Vehicle and Kart/Bike Swap unlocks.
+- Grand Prix ranking location checks (per CC).
+- Vanilla unlock blocking.
+- Complete [x] amount of cups on [y]CC for Goal options.
+- Useless, non-functional filler items.
+
+#### What features are **not** currently available (but are planned for the future)?
+- Item unlocks.
+- Functional, functional filler items.
+- Traps.
+- Individual race location checks.
+- Time trials location checks.
+
 ## Arcipelago History
 
 Archipelago is built upon a strong legacy of brilliant hobbyists. We want to honor that legacy by showing it here.
