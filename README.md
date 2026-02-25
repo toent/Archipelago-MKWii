@@ -36,7 +36,7 @@ presently, Archipelago is also the randomizer itself.
 - Character, Cup, Vehicle and Kart/Bike Swap unlocks.
 - Grand Prix ranking location checks (per CC).
 - Vanilla unlock blocking.
-- Complete [x] amount of cups on [y]CC for Goal options.
+- Achieve [x] rank on [y] cups on [z]CC for Goal options.
 - Useless, non-functional filler items.
 
 #### What features are **not** currently available (but are planned for the future)?
