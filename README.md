@@ -14,7 +14,7 @@ presently, Archipelago is also the randomizer itself.
 1. Install the requirements marked above according to their installers.
 2. Make sure that in Dolphin `Config > General > Enable Cheats` is **checked/enabled**.
 3. Make sure that in Dolphin `Config > Advanced > Enable Memory Size Override` is **unchecked/disabled**.
-4. If you have an existing Mario Kart Wii Savefile that you care about, __make sure to back them up__.
+4. If you have an existing Mario Kart Wii Savefile that you care about, __make sure to back it up__.
 5. **Windows:** Download the latest client and run `mkwii_client.exe`.
 6. **Linux:** Download the source code that goes along with the latest client and run `MKWii Client/mkwii_client.py`.
 7. **Linux:** Install required packages (the client will do this automatically after prompting you).
