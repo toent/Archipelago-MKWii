@@ -14,7 +14,7 @@ presently, Archipelago is also the randomizer itself.
 1. Install the requirements marked above according to their installers.
 2. Make sure that in Dolphin `Config > General > Enable Cheats` is **checked/enabled**.
 3. Make sure that in Dolphin `Config > Advanced > Enable Memory Size Override` is **unchecked/disabled**.
-4. If you have an existing Mario Kart Wii Savefile or Savestates that you care about, __make sure to back them up__.
+4. If you have an existing Mario Kart Wii Savefile that you care about, __make sure to back it up__.
 5. **Windows:** Download the latest client and run `mkwii_client.exe`.
 6. **Linux:** Download the source code that goes along with the latest client and run `MKWii Client/mkwii_client.py`.
 7. **Linux:** Install required packages (the client will do this automatically after prompting you).
@@ -29,6 +29,22 @@ presently, Archipelago is also the randomizer itself.
 * In the current version trap or filler items do not do anything yet. There is plans for them for later.
 * If you get any directory errors regarding saves or hotkeys, add `"dolphin_user_dir":"Y:/our/Filepath/Dolphin Emulator"` as the next entry in the `mkwii_ap_config.json`.
     * You can easily find your Dolphin Userdata by opening dolphin right-clicking a game and clicking `Open Wii Save Folder`, and then navigate back until you are in the `Dolphin Emulator` folder (this is the directory the client will need).
+
+### Current Features:
+#### What features are currently available?
+- Fully completable from start to finish.
+- Character, Cup, Vehicle and Kart/Bike Swap unlocks.
+- Grand Prix ranking location checks (per CC).
+- Vanilla unlock blocking.
+- Achieve [x] rank on [y] cups on [z]CC for Goal options.
+- Useless, non-functional filler items.
+
+#### What features are **not** currently available (but are planned for the future)?
+- Item unlocks.
+- Functional, functional filler items.
+- Traps.
+- Individual race location checks.
+- Time trials location checks.
 
 ## Arcipelago History
 
