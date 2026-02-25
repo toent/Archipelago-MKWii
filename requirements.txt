@@ -18,6 +18,7 @@ kivymd @ git+https://github.com/kivymd/KivyMD@5ff9d0d
 kivymd>=2.0.1.dev0
 pywinauto>=0.6.9
 pynput>=1.8.1
+pillow>=12.1.1
 
 # Legacy world dependencies that custom worlds rely on
 Pymem>=1.13.0
