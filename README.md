@@ -12,7 +12,7 @@ presently, Archipelago is also the randomizer itself.
 
 ### Getting Set up:
 1. Install the requirements marked above according to their installers.
-2. Make sure that in Dolphin `Config > General Enable Cheats` is **checked/enabled**.
+2. Make sure that in Dolphin `Config > General > Enable Cheats` is **checked/enabled**.
 3. Make sure that in Dolphin `Config > Advanced > Enable Memory Size Override` is **unchecked/disabled**.
 4. If you have an existing Mario Kart Wii Savefile or Savestates that you care about, __make sure to back them up__.
 5. **Windows:** Download the latest client and run `mkwii_client.exe`
