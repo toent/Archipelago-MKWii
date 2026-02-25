@@ -6,20 +6,21 @@ presently, Archipelago is also the randomizer itself.
 ## MKWii
 ### Things you will need:
 * An __unmodified PAL__ Mario Kart Wii ROM
-* [Git](https://git-scm.com/install/) (for installing some dependencies, any relatively recent version will do)
-* [Python 3.13.12](https://www.python.org/downloads/release/python-31312/) (Other Python versions might work, but do so at your own risk)
 * [Dolphin 2512](https://dolphin-emu.org/download/release/2512/) (Dolphin 5 or higher is the minimum)
 * [Latest MKWii Client and APWorld Release](https://github.com/toent/Archipelago-MKWii/releases/latest)
+* [TKinter (LINUX ONLY)](https://www.geeksforgeeks.org/installation-guide/how-to-install-tkinter-on-linux/) (+ [Python 3.13.12](https://www.python.org/downloads/release/python-31312/) and [Git](https://git-scm.com/install/) are needed)
 
 ### Getting Set up:
 1. Install the requirements marked above according to their installers.
-2. Make sure that in Dolphin `Settings > Advanced > Enable Memory Size Override` is unchecked/disabled.
-3. If you have an existing Mario Kart Wii Savefile or Savestates that you care about, __make sure to back them up__.
-4. Run `/MKWii Client/MKWii_Client.bat` (or `/MKWii Client/mkwii_client.py` in a CLI, if you're on linux)
-5. Install required packages (the client will do this automatically after prompting you).
-6. The client will ask for your ROM and your Dolphin make sure to assign them correctly.
-7. Follow other instructions posed by the client and connect to the archipelago.
-8. The client includes a text client and tracker window, they will open automatically.
+2. Make sure that in Dolphin `Config > General Enable Cheats` is **checked/enabled**.
+3. Make sure that in Dolphin `Config > Advanced > Enable Memory Size Override` is **unchecked/disabled**.
+4. If you have an existing Mario Kart Wii Savefile or Savestates that you care about, __make sure to back them up__.
+5. **Windows:** Download the latest client and run `mkwii_client.exe`
+6. **Linux:** Download the source code that goes along with the latest client and run `MKWii Client/mkwii_client.py`
+7. **Linux:** Install required packages (the client will do this automatically after prompting you).
+8. The client will ask for your ROM and your Dolphin make sure to assign them correctly.
+9. Follow other instructions posed by the client and connect to the Archipelago.
+10. The client includes a text client and tracker window, they will open automatically.
 
 ### Good to know:
 * The client might not connect to dolphin properly sometimes eventhough some text says it is, use `/status` in the text client to check for connection or check the tracker window. To fix this, just restart the client and try again.
