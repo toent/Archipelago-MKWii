@@ -439,6 +439,54 @@ class DolphinMemoryManager:
             logger.error(f"Error reading GP result for cup {cup_id} {cc}: {e}")
             return ("none", "D")
 
+    # Vanilla unlock block patch
+
+    # Primary:   write li r3, -1 + blr (0x3860FFFF 4E800020) to 0x80854FA4
+    # Fallback:  write li r3, -1       (0x3860FFFF)           to 0x805EB920
+    _PATCH_PRIMARY_ADDR   = 0x80854FA4
+    _PATCH_PRIMARY_BYTES  = bytes.fromhex("3860FFFF4E800020")
+    _PATCH_FALLBACK_ADDR  = 0x805EB920
+    _PATCH_FALLBACK_BYTES = bytes.fromhex("3860FFFF")
+
+    async def async_patch_vanilla_unlock_block(self):
+        """Write the unlock-prevention patch directly into emulated RAM.
+
+        Tries the 8-byte primary patch first (0x80854FA4), then the 4-byte
+        fallback (0x805EB920).  Returns True if at least one patch was applied
+        successfully, False if both writes fail.
+        """
+        if not self._hooked:
+            logger.warning("patch_vanilla_unlock_block: not hooked, skipping")
+            return
+
+        # Primary patch
+        try:
+            dme.write_bytes(self._PATCH_PRIMARY_ADDR, self._PATCH_PRIMARY_BYTES)
+            logger.info(
+                f"Unlock-block patch applied at 0x{self._PATCH_PRIMARY_ADDR:08X} "
+                f"({self._PATCH_PRIMARY_BYTES.hex().upper()})"
+            )
+            return
+        except Exception as e:
+            logger.warning(
+                f"Primary patch failed at 0x{self._PATCH_PRIMARY_ADDR:08X}: {e} "
+                f"— trying fallback..."
+            )
+
+        # Fallback patch
+        try:
+            dme.write_bytes(self._PATCH_FALLBACK_ADDR, self._PATCH_FALLBACK_BYTES)
+            logger.info(
+                f"Unlock-block fallback patch applied at 0x{self._PATCH_FALLBACK_ADDR:08X} "
+                f"({self._PATCH_FALLBACK_BYTES.hex().upper()})"
+            )
+            return
+        except Exception as e:
+            logger.error(
+                f"Fallback patch also failed at 0x{self._PATCH_FALLBACK_ADDR:08X}: {e}"
+            )
+            return
+
     # Helpers
 
     def _warn_once(self, key: str, msg: str) -> None:

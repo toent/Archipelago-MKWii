@@ -364,9 +364,10 @@ class MKWiiContext(CommonContext):
                     console_logger.warning("Lost Dolphin connection, retrying...")
                     self.dolphin.unhook()
                     continue
-
-                await self.check_locations()
+                
+                await self.dolphin.async_patch_vanilla_unlock_block()
                 await self._block_vanilla_unlocks()
+                await self.check_locations()
                 # await self._check_goal()
 
             except asyncio.CancelledError:
@@ -607,20 +608,20 @@ async def main() -> None:
     except ImportError:
         logger.warning("win32api not available, CMD close button may not disable Gecko codes")
 
-    iso_path = mgr.config.get("iso_path")
-    if iso_path and os.path.exists(iso_path):
-        print(f"  ISO: {os.path.basename(iso_path)}")
-        if not mgr.show_backup_reminder():
-            return
-    else:
-        setup = mgr.run_setup()
-        if not setup["ready"]:
-            return
-        iso_path = setup["iso_path"]
+    # iso_path = mgr.config.get("iso_path")
+    # if iso_path and os.path.exists(iso_path):
+    #     print(f"  ISO: {os.path.basename(iso_path)}")
+    #     if not mgr.show_backup_reminder():
+    #         return
+    # else:
+    #     setup = mgr.run_setup()
+    #     if not setup["ready"]:
+    #         return
+    #     iso_path = setup["iso_path"]
 
-    if not mgr.is_dolphin_running() and iso_path:
-        mgr.launch_dolphin(iso_path)
-        mgr.focus_game_window()
+    # if not mgr.is_dolphin_running() and iso_path:
+    #     mgr.launch_dolphin(iso_path)
+    #     mgr.focus_game_window()
 
     mgr.show_main_menu_reminder()
 

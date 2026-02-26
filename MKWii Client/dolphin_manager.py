@@ -15,7 +15,6 @@ import subprocess
 import sys
 import time
 from typing import Optional
-from pynput.keyboard import Key, Controller, KeyCode
 from gecko_manager import inject_gecko_codes
 
 logger = logging.getLogger("MKWii.Dolphin")
@@ -26,21 +25,6 @@ CONFIG_FILENAME = "mkwii_ap_config.json"
 BUNDLED_EMPTY_SAVE = "Saves/Empty Save/rksys.dat"
 # SAVESTATE_SLOT = 1
 
-KEY_MAP = {
-    "shift": Key.shift,
-    "ctrl": Key.ctrl,
-    "alt": Key.alt,
-    "return": Key.enter,
-    "escape": Key.esc,
-    "tab": Key.tab,
-    "f1": Key.f1,  "f2": Key.f2,  "f3": Key.f3,  "f4": Key.f4,
-    "f5": Key.f5,  "f6": Key.f6,  "f7": Key.f7,  "f8": Key.f8,
-    "f9": Key.f9,  "f10": Key.f10, "f11": Key.f11, "f12": Key.f12,
-    "subtract": KeyCode.from_vk(0x6D),
-    "add": KeyCode.from_vk(0x6B),
-    "numpad1": KeyCode.from_vk(0x61), "numpad2": KeyCode.from_vk(0x62),
-    "numpad3": KeyCode.from_vk(0x63), "numpad4": KeyCode.from_vk(0x64),
-}
 
 class DolphinManager:
     """Manages Dolphin process lifecycle, configuration, and savestate operations."""
@@ -60,64 +44,6 @@ class DolphinManager:
         self._dolphin_user_dir: Optional[str] = None
         self._game_app = None
         self._game_window = None
-        self.keyboard = Controller()
-        self.hotkeys_path = os.path.join(self.get_dolphin_user_dir(), "Config", "Hotkeys.ini")
-
-    # Dolphin hotkey binding handling
-    def parse_binding(self, raw: str) -> list:
-        """Parse a Dolphin binding string into a list of pynput keys."""
-        raw = raw.strip().replace("`", "")
-        
-        if raw.startswith("@(") and raw.endswith(")"):
-            parts = raw[2:-1].split("+")
-        else:
-            parts = [raw]
-        
-        keys = []
-        for part in parts:
-            part = part.strip().lower()
-            if part in KEY_MAP:
-                keys.append(KEY_MAP[part])
-            elif len(part) == 1:
-                keys.append(KeyCode.from_char(part))
-            else:
-                raise ValueError(f"Unknown key: '{part}'")
-        
-        return keys
-
-    def get_slot1_bindings(self) -> tuple[list, list]:
-        """Read Hotkeys.ini and return (load_keys, save_keys) for slot 1."""
-        config = configparser.ConfigParser()
-        config.read(self.hotkeys_path)
-
-        section = config["Hotkeys"]
-        
-        load_raw = section.get("load state/load state slot 1")
-        save_raw = section.get("save state/save state slot 1")
-
-        if not load_raw:
-            raise ValueError("Load State Slot 1 binding not found in Hotkeys.ini")
-        if not save_raw:
-            raise ValueError("Save State Slot 1 binding not found in Hotkeys.ini")
-
-        return self.parse_binding(load_raw), self.parse_binding(save_raw)
-
-    def press_combo(self, keys: list, delay: float = 0.05):
-        """Press a key combination, holding modifiers while pressing the final key."""
-        modifiers = keys[:-1]
-        final = keys[-1]
-
-        for mod in modifiers:
-            self.keyboard.press(mod)
-            time.sleep(delay)
-
-        self.keyboard.press(final)
-        time.sleep(delay)
-        self.keyboard.release(final)
-
-        for mod in reversed(modifiers):
-            self.keyboard.release(mod)
-            time.sleep(delay)
 
     # Config file handling
     def _load_config(self) -> dict:
@@ -262,25 +188,25 @@ class DolphinManager:
                 return path
         return None
 
-    def launch_dolphin(self, iso_path: str) -> bool:
-        dolphin_exe = self.find_dolphin_exe()
-        if not dolphin_exe:
-            logger.info("Dolphin.exe not found, please select it...")
-            dolphin_exe = self.pick_dolphin_exe()
-        if not dolphin_exe:
-            logger.error("Could not find Dolphin.exe")
-            return False
+    # def launch_dolphin(self, iso_path: str) -> bool:
+    #     dolphin_exe = self.find_dolphin_exe()
+    #     if not dolphin_exe:
+    #         logger.info("Dolphin.exe not found, please select it...")
+    #         dolphin_exe = self.pick_dolphin_exe()
+    #     if not dolphin_exe:
+    #         logger.error("Could not find Dolphin.exe")
+    #         return False
 
-        try:
-            self._dolphin_process = subprocess.Popen(
-                [dolphin_exe, "-e", iso_path, "-b"],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            )
-            logger.info(f"Launched Dolphin (PID {self._dolphin_process.pid})")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to launch Dolphin: {e}")
-            return False
+    #     try:
+    #         self._dolphin_process = subprocess.Popen(
+    #             [dolphin_exe, "-e", iso_path, "-b"],
+    #             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    #         )
+    #         logger.info(f"Launched Dolphin (PID {self._dolphin_process.pid})")
+    #         return True
+    #     except Exception as e:
+    #         logger.error(f"Failed to launch Dolphin: {e}")
+    #         return False
 
     def is_dolphin_running(self) -> bool:
         return self._dolphin_process is not None and self._dolphin_process.poll() is None
@@ -319,42 +245,6 @@ class DolphinManager:
                     pass
             return False
 
-    # Savestate operations
-
-    # def load_state(self, slot: int = SAVESTATE_SLOT) -> bool:
-    #     """Copy the bundled savestate into Dolphin's slot and trigger load via F-key."""
-    #     bundled = self.get_bundled_savestate_path()
-    #     ss_path = self.get_savestate_slot_path(slot)
-
-    #     if not os.path.isfile(bundled):
-    #         logger.error(f"Bundled savestate not found: {bundled}")
-    #         return False
-    #     if not ss_path:
-    #         logger.error("Could not determine savestate slot path")
-    #         return False
-
-    #     os.makedirs(os.path.dirname(ss_path), exist_ok=True)
-
-    #     try:
-    #         shutil.copy2(bundled, ss_path)
-    #     except Exception as e:
-    #         logger.error(f"Failed to copy savestate: {e}")
-    #         return False
-
-    #     if not self.focus_game_window():
-    #         logger.warning("Could not focus Dolphin window, sending F-key anyway")
-
-    #     try:
-    #         load_keys, _ = self.get_slot1_bindings()
-    #         self.press_combo(load_keys)
-    #     except Exception as e:
-    #         logger.error(f"Failed to send slot 1 key combo: {self.get_slot1_bindings()[0]} - {e}")
-    #         return False
-
-    #     time.sleep(0.5)
-    #     logger.info(f"Loaded savestate (slot {slot})")
-    #     return True
-
     # Backup reminder
 
     def show_backup_reminder(self) -> bool:
@@ -388,12 +278,13 @@ class DolphinManager:
     
     def show_main_menu_reminder(self) -> bool:
         """Prompt user to return to main menu. Returns False if user cancels."""
-        print("  Please navigate to the MKWii main menu before starting AP.")
-        print("  (the screen where you can select Single Player, Multiplayer, etc.)")
+        print("  Please navigate to the MKWii license select screen before starting AP.")
+        print("  (the screen where you can select any of the 4 licenses.)")
         print("  This ensures the save data is properly loaded and prevents")
         print("  potential issues with item tracking and progression.")
+        print("  NOTE: The AP currently only works with the top left license slot.")
 
-        response = input("\n  Are you at the main menu? (y/n): ").strip().lower()
+        response = input("\n  Are you at the license select screen? (y/n): ").strip().lower()
         if response != "y":
             if input("  Continue anyway? (y/n): ").strip().lower() != "y":
                 return False
@@ -440,20 +331,12 @@ class DolphinManager:
         print("  Mario Kart Wii - Archipelago Setup")
         print("=" * 60 + "\n")
 
-        iso_path = self.get_iso_path()
-        if not iso_path:
-            print("  No ISO selected.")
-            return result
-        result["iso_path"] = iso_path
-        print(f"  ISO: {os.path.basename(iso_path)}")
-
-        # if self.has_bundled_savestate:
-        #     size = os.path.getsize(self.get_bundled_savestate_path())
-        #     print(f"  Savestate: {BUNDLED_SAVESTATE} ({size / 1024 / 1024:.1f} MB)")
-        # else:
-        #     print(f"  Savestate not found: {BUNDLED_SAVESTATE}")
-        #     print(f"    Expected at: {self.get_bundled_savestate_path()}")
+        # iso_path = self.get_iso_path()
+        # if not iso_path:
+        #     print("  No ISO selected.")
         #     return result
+        # result["iso_path"] = iso_path
+        # print(f"  ISO: {os.path.basename(iso_path)}")
 
         if not self.show_backup_reminder():
             return result
