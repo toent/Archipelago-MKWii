@@ -19,6 +19,7 @@ import struct
 from typing import Dict, Optional, Set, Tuple
 
 import dolphin_memory_engine as dme
+import asyncio
 
 logger = logging.getLogger("MKWii.Memory")
 
@@ -179,13 +180,15 @@ def get_vehicle_alternates(vehicle_name: str) -> Set[str]:
 class DolphinMemoryManager:
     """Reads and writes MKWii game state via Dolphin's memory interface."""
 
-    def __init__(self, license_num: int = 1) -> None:
+    def __init__(self, license_num: int = 1, logger=None) -> None:
         self.license_idx = license_num - 1
         self._manager_ptr: Optional[int] = None
         self._runtime_base: Optional[int] = None
         self._save_buffer_base: Optional[int] = None
         self._hooked: bool = False
         self._suppress_warnings: Dict[str, bool] = {}
+        if(logger is not None):
+            self.logger = logger
 
     @property
     def is_connected(self) -> bool:
@@ -213,22 +216,24 @@ class DolphinMemoryManager:
             self._save_buffer_base = None
             return False
 
-    def hook(self) -> bool:
+    async def async_hook(self) -> bool:
         """Hook to Dolphin and resolve the MKWii pointer chain.
 
         Returns True if fully connected with valid save system pointers.
         Silently returns False during normal boot (memory not yet mapped).
         """
+        logger.info("Attempting to hook to Dolphin and resolve MKWii pointers...")
         try:
             # Only hook if not already hooked
             if not dme.is_hooked():
                 dme.hook()
 
             if not dme.is_hooked():
+                logger.warning("DME failed to hook!")
                 return False
 
-            return self._resolve_pointers()
-
+            logger.info("DME hooked successfully, resolving pointers...")
+            return await self.async_resolve_pointers()
         except Exception as e:
             logger.error(f"Hook failed unexpectedly: {e}")
             try:
@@ -238,34 +243,16 @@ class DolphinMemoryManager:
             self._hooked = False
             return False
 
-    def resolve_pointers(self) -> bool:
-        """Re-resolve the MKWii pointer chain without touching the DME connection.
-
-        Use this after a savestate load when Dolphin is still the same process
-        but memory layout may have changed. Much faster than a full hook() cycle.
-        Returns True if the save system is ready.
-        """
-        try:
-            if not dme.is_hooked():
-                return False
-            return self._resolve_pointers()
-        except Exception as e:
-            logger.error(f"Pointer resolution failed: {e}")
-            self._hooked = False
-            return False
-
-    def _resolve_pointers(self) -> bool:
+    async def async_resolve_pointers(self) -> bool:
         """Internal: walk the pointer chain and validate the save system."""
-        # Verify PAL game ID — may throw if emulated memory isn't mapped yet
+        # Verify PAL game ID - may throw if emulated memory isn't mapped yet
         try:
             game_id = dme.read_bytes(0x80000000, 6).decode("ascii", errors="replace")
         except Exception as e:
-            #self._warn_once("boot", f"Waiting for Dolphin to load game: {e}")
-            logger.warning("boot", f"Waiting for Dolphin to load game: {e}")
+            logger.warning("boot", f"Waiting for Dolphin to load game: {e}")    
             return False
 
         if game_id != "RMCP01":
-            #self._warn_once("game_id", f"Wrong game ID: {game_id} (expected RMCP01)")
             logger.warning(f"Wrong game ID: {game_id} (expected RMCP01)")
             return False
 
@@ -273,36 +260,40 @@ class DolphinMemoryManager:
         try:
             raw = dme.read_bytes(SYSTEM_MANAGER_PTR, 4)
         except Exception as e:
-            #self._warn_once("manager_read", f"Game still initializing: {e}")
             logger.warning(f"Game still initializing: {e}")
             return False
 
         mgr_ptr = struct.unpack(">I", raw)[0]
+        await asyncio.sleep(0.1)  # 0.1s delay in code
         if mgr_ptr < 0x80000000:
-            #self._warn_once("manager", "Waiting for game to load past title screen...")
             logger.warning("Waiting for game to load past title screen...")
             return False
 
+        await asyncio.sleep(0.1)  # 0.1s delay in code
+ 
         # Resolve save buffer pointer and verify RKSD magic
         try:
             save_ptr_raw = dme.read_bytes(mgr_ptr + RAW_SAVE_OFFSET, 4)
         except Exception as e:
-            #self._warn_once("save_read", f"Save system loading: {e}")
             logger.warning(f"Save system loading: {e}")
             return False
 
         save_ptr = struct.unpack(">I", save_ptr_raw)[0]
+        await asyncio.sleep(0.1)  # 0.1s delay in code
+        
         if save_ptr < 0x80000000:
-            #self._warn_once(save_ptr, "Save system loading...")
             logger.warning(f"Save system loading: {save_ptr}")
             return False
+
+        await asyncio.sleep(0.1)  # 0.1s delay in code
 
         try:
             magic = dme.read_bytes(save_ptr, 4)
         except Exception as e:
-            #self._warn_once("magic_read", f"Save buffer not ready: {e}")
             logger.warning(f"Save buffer not ready: {e}")
             return False
+        
+        await asyncio.sleep(0.1)  # 0.1s delay in code
 
         if magic != b"RKSD":
             #self._warn_once("magic", f"Save buffer initializing (magic: {magic.hex()})...")

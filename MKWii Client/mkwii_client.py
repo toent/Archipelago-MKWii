@@ -112,22 +112,6 @@ class MKWiiCommandProcessor(ClientCommandProcessor):
         """Manually trigger a location check cycle."""
         asyncio.create_task(self.ctx.check_locations())  # type: ignore[union-attr]
 
-    # def _cmd_loadstate(self) -> None:
-    #     """Load the clean savestate and re-apply AP unlocks."""
-    #     ctx: MKWiiContext = self.ctx  # type: ignore[assignment]
-    #     if not ctx.dolphin_mgr or not ctx.dolphin_mgr.has_bundled_savestate:
-    #         self.output("No savestate available")
-    #         return
-    #     asyncio.create_task(ctx._do_savestate_load("manual /loadstate"))
-
-    # def _cmd_restart(self) -> None:
-    #     """Restart the connection between the client and Dolphin by loading the clean savestate and rehooking."""
-    #     ctx: MKWiiContext = self.ctx  # type: ignore[assignment]
-    #     if not ctx.dolphin_mgr or not ctx.dolphin_mgr.has_bundled_savestate:
-    #         self.output("No savestate available")
-    #         return
-    #     asyncio.create_task(ctx._do_savestate_load("manual /restart"))
-
     def _cmd_hook(self) -> None:
         """Force restart the Dolphin hook process (unhook + fresh re-hook)."""
         ctx: MKWiiContext = self.ctx  # type: ignore[assignment]
@@ -178,13 +162,8 @@ class MKWiiContext(CommonContext):
 
         # Vanilla blocking state
         self._recently_blocked: Set[str] = set()
-        # Grace period after savestate load - suppress all blocking to let memory stabilize
-        self._grace_until: float = 0.0
-        # True while a savestate load is in progress - poll loop must not interfere
+        # True while a load is in progress - poll loop must not interfere
         self._loading_state: bool = False
-        # Set when a savestate loaded but rehook failed - poll loop should
-        # apply grace period when it eventually reconnects
-        self._needs_post_load_grace: bool = False
 
     async def server_auth(self, password_requested: bool = False) -> None:
         if password_requested and not self.password:
@@ -307,112 +286,25 @@ class MKWiiContext(CommonContext):
     # Dolphin connection
 
     async def _try_hook_dolphin(self) -> bool:
+        logger.warning("Starting Dolphin hook process...")
         if self.dolphin is None:
-            self.dolphin = DolphinMemoryManager(license_num=1)
+            self.dolphin = DolphinMemoryManager(license_num=1, logger=console_logger)
 
-        if not self.dolphin.hook():
+        logger.info("Attempting to hook to Dolphin...")
+        if not await self.dolphin.async_hook():
             logger.debug("Not hooked to Dolphin yet")
             return False
 
         logger.info("Connected to Dolphin")
 
-        # On first connection, load clean savestate for a fresh AP start
-        # if not self._initial_state_loaded and self.dolphin_mgr:
-        #     self._initial_state_loaded = True
-
-        #     if self.dolphin_mgr.has_bundled_savestate:
-        #         await self._do_savestate_load("initial clean start")
-        #         # _do_savestate_load handles its own re-hook + re-apply.
-        #         # If re-hook failed, we must not claim success - the poll
-        #         # loop will retry on the next cycle.
-        #         if not self.dolphin or not self.dolphin.is_connected:
-        #             return False
-        #         return True
-        #     else:
-        #         logger.error("Bundled savestate missing - place MKWii_AP_Savestate.sav next to the client")
+        logger.info("Applying AP unlocks to current Dolphin session...")
         self._apply_all_received_items()
-
-        # If recovering from a failed loadstate rehook, set grace period
-        if self._needs_post_load_grace:
-            self._needs_post_load_grace = False
-            self._grace_until = time.monotonic() + POST_LOAD_GRACE_SECS
-            console_logger.info("Recovered from savestate load - grace period active")
-
         return True
-
-    # async def _do_savestate_load(self, reason: str) -> bool:
-    #     """Load the clean savestate, re-hook, and re-apply AP items.
-
-    #     Used for the initial clean start and as the last-resort escalation
-    #     when bit-level locking can't keep up with the game re-deriving bits.
-    #     """
-    #     if not self.dolphin_mgr or not self.dolphin_mgr.has_bundled_savestate:
-    #         return False
-
-    #     # Prevent the poll loop from interfering during the load
-    #     self._loading_state = True
-    #     self._recently_blocked.clear()
-
-    #     try:
-    #         console_logger.info(f"Loading savestate ({reason})...")
-
-    #         # Mark internal pointers as stale but keep DME connected -
-    #         # Dolphin is the same process, we just need to re-resolve pointers.
-    #         if self.dolphin:
-    #             self.dolphin._hooked = False
-    #             self.dolphin._manager_ptr = None
-    #             self.dolphin._runtime_base = None
-    #             self.dolphin._save_buffer_base = None
-
-    #         self.dolphin_mgr.load_state()
-
-    #         # Dolphin needs time to decompress and apply the savestate.
-    #         # During active gameplay this takes longer than at boot.
-    #         await asyncio.sleep(POST_LOAD_SETTLE_SECS)
-
-    #         # Re-resolve pointers (lightweight - no DME unhook/rehook).
-    #         # The save system needs time to reinitialize after a state load.
-    #         for attempt in range(40):
-    #             if self.dolphin and self.dolphin.resolve_pointers():
-    #                 break
-    #             if attempt in (5, 15, 25, 35):
-    #                 console_logger.info(f"Waiting for save system... (attempt {attempt + 1}/40)")
-    #             await asyncio.sleep(1.0)
-    #         else:
-    #             # resolve_pointers failed - try a full DME rehook as last resort
-    #             console_logger.info("Pointer resolution failed, trying full DME rehook...")
-    #             if self.dolphin:
-    #                 self.dolphin.unhook()
-    #             for attempt in range(10):
-    #                 if self.dolphin and self.dolphin.hook():
-    #                     break
-    #                 await asyncio.sleep(1.0)
-
-    #         if not self.dolphin or not self.dolphin.is_connected:
-    #             # Don't panic - the poll loop will keep retrying hook()
-    #             # and will re-apply items once connected.
-    #             self._needs_post_load_grace = True
-    #             console_logger.warning(
-    #                 "Savestate loaded but hook timed out - poll loop will retry automatically. "
-    #                 "You can also try /hook"
-    #             )
-    #             return False
-
-    #         self._apply_all_received_items()
-    #         # Set grace period AFTER rehook so it doesn't expire during the loop
-    #         self._grace_until = time.monotonic() + POST_LOAD_GRACE_SECS
-    #         console_logger.info("Savestate loaded, AP unlocks re-applied")
-    #         return True
-    #     except Exception as e:
-    #         console_logger.error(f"Error during savestate load: {e}")
-    #     finally:
-    #         # Always release the lock so the poll loop can resume
-    #         self._loading_state = False
 
     async def _force_rehook(self) -> None:
         """Force a fresh hook to Dolphin, bypassing initial savestate logic."""
         if self.dolphin is None:
-            self.dolphin = DolphinMemoryManager(license_num=1)
+            self.dolphin = DolphinMemoryManager(license_num=1, logger=console_logger)
 
         # Prevent poll loop from interfering
         self._loading_state = True
@@ -421,14 +313,9 @@ class MKWiiContext(CommonContext):
             self.dolphin_mgr.focus_game_window()
         try:
             for attempt in range(30):
-                if self.dolphin.hook():
+                if self._try_hook_dolphin():
                     logger.info("Hooked to Dolphin via /hook")
                     self._apply_all_received_items()
-
-                    if self._needs_post_load_grace:
-                        self._needs_post_load_grace = False
-                        self._grace_until = time.monotonic() + POST_LOAD_GRACE_SECS
-                        console_logger.info("Grace period active after savestate recovery")
 
                     return
 
@@ -449,20 +336,23 @@ class MKWiiContext(CommonContext):
         """Main loop: connect to Dolphin, check locations, enforce AP state."""
         console_logger.info("Starting Dolphin memory poll...")
         if self.dolphin is None:
-            self.dolphin = DolphinMemoryManager(license_num=1)
+            self.dolphin = DolphinMemoryManager(license_num=1, logger=console_logger)
 
+        console_logger.info("Starting Dolphin memory polling loop...")
         while True:
             try:
                 if not self.dolphin._hooked:
                     asyncio.sleep(1)
+                    console_logger.info("Focusing Dolphin window for hook...")
                     self.dolphin_mgr.focus_game_window()
                 await asyncio.sleep(0.5)
 
-                # Don't touch Dolphin while a savestate load is in progress
+                # Don't touch Dolphin while a load is in progress
                 if self._loading_state:
                     continue
 
                 if not self.dolphin or not self.dolphin.is_connected:
+                    console_logger.info("Trying to hook Dolphin...")
                     if not await self._try_hook_dolphin():
                         await asyncio.sleep(2)
                         continue
@@ -485,8 +375,7 @@ class MKWiiContext(CommonContext):
                 console_logger.error(f"Poll error: {e}")
                 await asyncio.sleep(2)
 
-    # -- Vanilla unlock blocking --
-
+    # Vanilla unlock blocking
     async def _block_vanilla_unlocks(self) -> None:
         """Detect and revert any unlocks not granted by AP.
 
@@ -501,10 +390,6 @@ class MKWiiContext(CommonContext):
         what actually fixes it.
         """
         if not self.dolphin or not self.dolphin.is_connected:
-            return
-
-        # Grace period after savestate load - don't touch anything
-        if time.monotonic() < self._grace_until:
             return
 
         try:
@@ -534,18 +419,10 @@ class MKWiiContext(CommonContext):
                 # Bit-lock any unauthorized bits
                 for name in blocked:
                     if name in ALL_UNLOCK_IDS:
-                        #await asyncio.sleep(5) # CHANGE AFTER GECKO CODE FOR BLOCKING UNLOCK SCREEN: Wait a moment to let any new bits stabilize before locking
                         self.dolphin.lock_item(name)
 
             for name in blocked:
                 logger.warning(f"Blocked vanilla unlock: {name}")
-
-            # Load savestate to wipe the GP data causing re-derivation
-            # """Load the clean savestate and re-apply AP unlocks."""
-            # if not self.dolphin_mgr or not self.dolphin_mgr.has_bundled_savestate:
-            #     self.output("No savestate available")
-            #     return
-            # await self._do_savestate_load("vanilla unlock blocked")
 
         except Exception as e:
             console_logger.error(f"Error in vanilla unlock blocking: {e}")
@@ -741,10 +618,6 @@ async def main() -> None:
             return
         iso_path = setup["iso_path"]
 
-    # if not mgr.has_bundled_savestate:
-    #     print(f"  Savestate not found: {mgr.get_bundled_savestate_path()}")
-    #     return
-
     if not mgr.is_dolphin_running() and iso_path:
         mgr.launch_dolphin(iso_path)
         mgr.focus_game_window()
@@ -779,4 +652,3 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         pass
-
