@@ -30,6 +30,7 @@ presently, Archipelago is also the randomizer itself.
 * In the current version trap or filler items do not do anything yet. There is plans for them for later.
 * If you get any directory errors regarding saves or gecko codes not loading, add `"dolphin_user_dir":"Y:/our/Filepath/Dolphin Emulator"` as the next entry in the `mkwii_ap_config.json`.
     * You can easily find your Dolphin Userdata by opening dolphin right-clicking a game and clicking `Open Wii Save Folder`, and then navigate back until you are in the `Dolphin Emulator` folder (this is the directory the client will need).
+* For **Linux** make sure to use the use the **flatpak** version of Dolphin, other versions will **not** work.
 
 ### Current Features:
 #### What features are currently available?
