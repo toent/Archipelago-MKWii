@@ -107,8 +107,8 @@ CUP_UNLOCK_IDS: Dict[str, Tuple[int, int]] = {
     # 50cc
     "Star Cup 50cc":       (0x003A, 6),
     "Special Cup 50cc":    (0x0039, 2),
-    "Leaf Cup 50cc":       (0x0038, 2),
-    "Lightning Cup 50cc":  (0x0039, 6),
+    "Leaf Cup 50cc":       (0x0039, 6),
+    "Lightning Cup 50cc":  (0x0038, 2),
     # 100cc
     "Star Cup 100cc":      (0x003A, 7),
     "Special Cup 100cc":   (0x0039, 3),
