@@ -12,15 +12,16 @@ presently, Archipelago is also the randomizer itself.
 
 ### Getting Set up:
 1. Install the requirements marked above according to their installers.
-2. Make sure that in Dolphin `Config > General > Enable Cheats` is **checked/enabled**.
-3. Make sure that in Dolphin `Config > Advanced > Enable Memory Size Override` is **unchecked/disabled**.
-4. If you have an existing Mario Kart Wii Savefile that you care about, __make sure to back it up__.
-5. **Windows:** Download the latest client and run `mkwii_client.exe`.
-6. **Linux:** Download the source code that goes along with the latest client and run `MKWii Client/mkwii_client.py`.
-7. **Linux:** Install required packages (the client will do this automatically after prompting you).
-8. The client will ask for your ROM and your Dolphin make sure to assign them correctly.
-9. Follow other instructions posed by the client and connect to the Archipelago.
-10. The client includes a text client and tracker window, they will open automatically.
+2. Make sure that in Dolphin `Config > Advanced > Enable Memory Size Override` is **unchecked/disabled**.
+3. If you have an existing Mario Kart Wii Savefile that you care about, __make sure to back it up__.
+4. **Windows:** Download the latest client and run `mkwii_client.exe`.
+5. **Linux:** Download the source code that goes along with the latest client and run `MKWii Client/mkwii_client.py`.
+6. **Linux:** Install required packages (the client will do this automatically after prompting you).
+7. The client will ask for your savefile, choose the one you get by going to `Dolphin > MKWii > Right Click > Open Wii Save Folder`.
+8. If you opt for **Auto Dolphin start**, the client will ask for your ROM and your Dolphin make sure to assign them correctly.
+9. If you opt for **Manual Dolphin start**, make sure the client is at the license selection question before opening your emulation instance.
+10. Follow other instructions posed by the client and connect to the Archipelago.
+11. The client includes a text client and tracker window, they will open automatically.
 
 ### Good to know:
 * The client might not connect to dolphin properly sometimes eventhough some text says it is, use `/status` in the text client to check for connection or check the tracker window. To fix this, just restart the client and try again.
