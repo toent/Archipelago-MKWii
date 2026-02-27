@@ -37,11 +37,8 @@ sys.excepthook = _crash_handler
 import asyncio
 import logging
 import os
-import time
-import atexit
 from pathlib import Path
 from typing import Dict, Optional, Set, Tuple
-from gecko_manager import disable_gecko_codes
 
 # Resolve imports from parent Archipelago directory
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
@@ -593,35 +590,26 @@ async def main() -> None:
 
     mgr = DolphinManager()
 
-    # Handle all exit paths: normal exit, Ctrl+C, and CMD window close button
-    def _on_exit():
-        disable_gecko_codes(mgr.get_dolphin_user_dir())
+    if "dolphin_auto_launch" not in mgr.config:
+        mgr.show_dolphin_auto_launch_selection()
+    
+    iso_path = None
+    if mgr.config.get("dolphin_auto_launch", True):
+        iso_path = mgr.config.get("iso_path")
+        if not iso_path or not os.path.exists(iso_path):
+            setup = mgr.run_setup()
+            if not setup["ready"]:
+                return
+            iso_path = setup["iso_path"]
+        else:
+            print(f"  ISO: {os.path.basename(iso_path)}")
 
-    atexit.register(_on_exit)  # normal exit / Ctrl+C
+    if not mgr.show_backup_reminder():
+        return
 
-    try:
-        import win32api
-        def _console_handler(event):
-            _on_exit()
-            return False  # False = let Windows proceed with default handling
-        win32api.SetConsoleCtrlHandler(_console_handler, True)
-    except ImportError:
-        logger.warning("win32api not available, CMD close button may not disable Gecko codes")
-
-    # iso_path = mgr.config.get("iso_path")
-    # if iso_path and os.path.exists(iso_path):
-    #     print(f"  ISO: {os.path.basename(iso_path)}")
-    #     if not mgr.show_backup_reminder():
-    #         return
-    # else:
-    #     setup = mgr.run_setup()
-    #     if not setup["ready"]:
-    #         return
-    #     iso_path = setup["iso_path"]
-
-    # if not mgr.is_dolphin_running() and iso_path:
-    #     mgr.launch_dolphin(iso_path)
-    #     mgr.focus_game_window()
+    if mgr.config.get("dolphin_auto_launch", True) and not mgr.is_dolphin_running() and iso_path:
+        mgr.launch_dolphin(iso_path)
+        mgr.focus_game_window()
 
     mgr.show_main_menu_reminder()
 

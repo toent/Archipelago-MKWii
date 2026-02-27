@@ -7,15 +7,12 @@ clean state file into Dolphin's slot directory, then sending an F-key
 via pywinauto to trigger the load.
 """
 import json
-import configparser
 import logging
 import os
 import shutil
 import subprocess
 import sys
-import time
 from typing import Optional
-from gecko_manager import inject_gecko_codes
 
 logger = logging.getLogger("MKWii.Dolphin")
 
@@ -84,18 +81,40 @@ class DolphinManager:
             return custom
         return ""
 
-    # def get_savestate_slot_path(self, slot: int = SAVESTATE_SLOT) -> Optional[str]:
-    #     user_dir = self.get_dolphin_user_dir()
-    #     if not user_dir:
-    #         return ""
-    #     return os.path.join(user_dir, "StateSaves", f"{GAME_ID}.s{slot:02d}")
+    # Save file picker
+    def get_save_path(self) -> Optional[str]:
+        saved = self.config.get("save_path")
+        if saved and os.path.isfile(saved):
+            return saved
 
-    # def get_bundled_savestate_path(self) -> str:
-    #     return os.path.join(self._script_dir, BUNDLED_SAVESTATE)
+        path = self._pick_save_dialog()
+        if path and os.path.isfile(path):
+            self.config["save_path"] = path
+            self._save_config()
+            return path
+        return ""
 
-    # @property
-    # def has_bundled_savestate(self) -> bool:
-    #     return os.path.isfile(self.get_bundled_savestate_path())
+    def _pick_save_dialog(self) -> Optional[str]:
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes("-topmost", True)
+            path = filedialog.askopenfilename(
+                title="Select Mario Kart Wii save file (rksys.dat)",
+                filetypes=[
+                    ("MKWii save file", "rksys.dat"),
+                    ("All files", "*.*"),
+                ],
+            )
+            root.destroy()
+            return path or ""
+        except Exception as e:
+            logger.error(f"File dialog failed: {e}")
+            path = input("Enter path to rksys.dat: ").strip().strip('"')
+            return path or ""
 
     # ISO picker
     def get_iso_path(self) -> Optional[str]:
@@ -188,25 +207,25 @@ class DolphinManager:
                 return path
         return None
 
-    # def launch_dolphin(self, iso_path: str) -> bool:
-    #     dolphin_exe = self.find_dolphin_exe()
-    #     if not dolphin_exe:
-    #         logger.info("Dolphin.exe not found, please select it...")
-    #         dolphin_exe = self.pick_dolphin_exe()
-    #     if not dolphin_exe:
-    #         logger.error("Could not find Dolphin.exe")
-    #         return False
+    def launch_dolphin(self, iso_path: str) -> bool:
+        dolphin_exe = self.find_dolphin_exe()
+        if not dolphin_exe:
+            logger.info("Dolphin.exe not found, please select it...")
+            dolphin_exe = self.pick_dolphin_exe()
+        if not dolphin_exe:
+            logger.error("Could not find Dolphin.exe")
+            return False
 
-    #     try:
-    #         self._dolphin_process = subprocess.Popen(
-    #             [dolphin_exe, "-e", iso_path, "-b"],
-    #             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    #         )
-    #         logger.info(f"Launched Dolphin (PID {self._dolphin_process.pid})")
-    #         return True
-    #     except Exception as e:
-    #         logger.error(f"Failed to launch Dolphin: {e}")
-    #         return False
+        try:
+            self._dolphin_process = subprocess.Popen(
+                [dolphin_exe, "-e", iso_path, "-b"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            logger.info(f"Launched Dolphin (PID {self._dolphin_process.pid})")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to launch Dolphin: {e}")
+            return False
 
     def is_dolphin_running(self) -> bool:
         return self._dolphin_process is not None and self._dolphin_process.poll() is None
@@ -250,7 +269,6 @@ class DolphinManager:
     def show_backup_reminder(self) -> bool:
         """Prompt user about save data backup. Returns False if user cancels."""
         if not self.config.get("remind_backup", True):
-            inject_gecko_codes(self.get_dolphin_user_dir())
             self.replace_save_with_empty()
             return True
 
@@ -259,10 +277,9 @@ class DolphinManager:
         print("  Loading the AP will overwrite your save with an empty one.")
         print("  Additionally the included save will cause MKWii")
         print("  to auto-save over your existing save data.")
-        user_dir = self.get_dolphin_user_dir()
-        if user_dir:
-            print(f"\n  Save location: {user_dir}")
-            print("    Wii/title/00010004/524d4350/data/rksys.dat")
+        save_path = self.config.get("save_path")
+        if save_path:
+            print(f"\n  Save location: {save_path}")
 
         response = input("\n  Have you backed up your save? (y/n): ").strip().lower()
         if response != "y":
@@ -272,7 +289,6 @@ class DolphinManager:
         remind = input("  Show this reminder next time? (y/n): ").strip().lower()
         self.config["remind_backup"] = remind == "y"
         self._save_config()
-        inject_gecko_codes(self.get_dolphin_user_dir())
         self.replace_save_with_empty()
         return True
     
@@ -289,30 +305,38 @@ class DolphinManager:
             if input("  Continue anyway? (y/n): ").strip().lower() != "y":
                 return False
         return True
+
+    def show_dolphin_auto_launch_selection(self) -> bool:
+        """Ask user if they want Dolphin to auto-launch with the ISO. Returns True if yes."""
+        print("\n  Dolphin Auto-Launch")
+        print("  " + "-" * 40)
+        print("  Would you like the AP client to automatically launch Dolphin with the selected ISO when you start the client?")
+        print("  This can be changed later in the config file.")
+
+        response = input("\n  Enable Dolphin auto-launch? (y/n): ").strip().lower()
+        enable = response == "y"
+        self.config["dolphin_auto_launch"] = enable
+        self._save_config()
+        return enable
     
     # find existing save, then replace with empty save
     def replace_save_with_empty(self) -> bool:
-        user_dir = self.get_dolphin_user_dir()
-        if not user_dir:
-            logger.error("Could not determine Dolphin user directory for save replacement")
+        save_path = self.get_save_path()
+        if not save_path:
+            logger.error("No save file selected")
             return False
 
-        save_path = os.path.join(user_dir, "wii", "title", "00010004", "524d4350", "data", "rksys.dat")
         empty_save = os.path.join(self._script_dir, BUNDLED_EMPTY_SAVE)
-
         if not os.path.isfile(empty_save):
             logger.error(f"Bundled empty save not found: {empty_save}")
             return False
 
-        if os.path.isfile(save_path):
-            backup_path = save_path + ".backup"
-            try:
-                shutil.copy2(save_path, backup_path)
-                logger.info(f"Backed up existing save to: {backup_path}")
-            except Exception as e:
-                logger.warning(f"Failed to backup existing save: {e}")
-
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        backup_path = save_path + ".backup"
+        try:
+            shutil.copy2(save_path, backup_path)
+            logger.info(f"Backed up existing save to: {backup_path}")
+        except Exception as e:
+            logger.warning(f"Failed to backup existing save: {e}")
 
         try:
             shutil.copy2(empty_save, save_path)
@@ -331,15 +355,13 @@ class DolphinManager:
         print("  Mario Kart Wii - Archipelago Setup")
         print("=" * 60 + "\n")
 
-        # iso_path = self.get_iso_path()
-        # if not iso_path:
-        #     print("  No ISO selected.")
-        #     return result
-        # result["iso_path"] = iso_path
-        # print(f"  ISO: {os.path.basename(iso_path)}")
-
-        if not self.show_backup_reminder():
-            return result
+        if self.config.get("dolphin_auto_launch", True):
+            iso_path = self.get_iso_path()
+            if not iso_path:
+                print("  No ISO selected.")
+                return result
+            result["iso_path"] = iso_path
+            print(f"  ISO: {os.path.basename(iso_path)}")
 
         result["ready"] = True
         print("\n  Setup complete!\n")
