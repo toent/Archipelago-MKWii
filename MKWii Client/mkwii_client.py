@@ -25,12 +25,16 @@ Expected directory layout:
 """
 from __future__ import annotations
 import sys
+from time import time
 import traceback
+from dolphin_manager import DolphinManager
 
 def _crash_handler(exc_type, exc_value, exc_tb):
     with open("crash.log", "w") as f:
         traceback.print_exception(exc_type, exc_value, exc_tb, file=f)
     traceback.print_exception(exc_type, exc_value, exc_tb)
+
+from reporting import report_handler as _report_handler
 
 sys.excepthook = _crash_handler
 
@@ -52,7 +56,6 @@ from dolphin_memory import (
     CHARACTER_IDS, VEHICLE_IDS, CUP_UNLOCK_IDS, MODE_IDS, ALL_UNLOCK_IDS,
     CUP_TROPHY_IDS, DolphinMemoryManager, get_vehicle_alternates,
 )
-from dolphin_manager import DolphinManager
 from tracker import launch_tracker
 
 # Console logger for verbose output that should not appear in the AP GUI
@@ -284,17 +287,23 @@ class MKWiiContext(CommonContext):
 
     async def _try_hook_dolphin(self) -> bool:
         logger.warning("Starting Dolphin hook process...")
+        _report_handler("WARNING: Starting Dolphin hook process...", self.dolphin_mgr)
+
         if self.dolphin is None:
             self.dolphin = DolphinMemoryManager(license_num=1, logger=console_logger)
 
         logger.info("Attempting to hook to Dolphin...")
+        _report_handler("INFO: Attempting to hook to Dolphin...", self.dolphin_mgr)
         if not await self.dolphin.async_hook():
             logger.debug("Not hooked to Dolphin yet")
+            _report_handler("DEBUG: Not hooked to Dolphin yet", self.dolphin_mgr)
             return False
 
         logger.info("Connected to Dolphin")
+        _report_handler("INFO: Connected to Dolphin", self.dolphin_mgr)
 
         logger.info("Applying AP unlocks to current Dolphin session...")
+        _report_handler("INFO: Applying AP unlocks to current Dolphin session...", self.dolphin_mgr)
         self._apply_all_received_items()
         return True
 
@@ -312,16 +321,19 @@ class MKWiiContext(CommonContext):
             for attempt in range(30):
                 if self._try_hook_dolphin():
                     logger.info("Hooked to Dolphin via /hook")
+                    _report_handler("INFO: Hooked to Dolphin via /hook", self.dolphin_mgr)
                     self._apply_all_received_items()
 
                     return
 
                 if attempt in (5, 15, 25):
                     console_logger.info(f"Waiting for Dolphin... (attempt {attempt + 1}/30)")
+                    _report_handler(f"INFO: Waiting for Dolphin... (attempt {attempt + 1}/30)", self.dolphin_mgr)
 
                 await asyncio.sleep(1.0)
 
             logger.warning("/hook failed after 30 attempts - poll loop will retry")
+            _report_handler("WARNING: /hook failed after 30 attempts - poll loop will retry", self.dolphin_mgr)
 
         finally:
             # Always release so poll loop can resume
@@ -332,15 +344,18 @@ class MKWiiContext(CommonContext):
     async def _poll_dolphin(self) -> None:
         """Main loop: connect to Dolphin, check locations, enforce AP state."""
         console_logger.info("Starting Dolphin memory poll...")
+        _report_handler("INFO: Starting Dolphin memory poll...", self.dolphin_mgr)
         if self.dolphin is None:
             self.dolphin = DolphinMemoryManager(license_num=1, logger=console_logger)
 
         console_logger.info("Starting Dolphin memory polling loop...")
+        _report_handler("INFO: Starting Dolphin memory polling loop...", self.dolphin_mgr)
         while True:
             try:
                 if not self.dolphin._hooked:
                     asyncio.sleep(1)
                     console_logger.info("Focusing Dolphin window for hook...")
+                    _report_handler("INFO: Focusing Dolphin window for hook...", self.dolphin_mgr)
                     self.dolphin_mgr.focus_game_window()
                 await asyncio.sleep(0.5)
 
@@ -350,6 +365,7 @@ class MKWiiContext(CommonContext):
 
                 if not self.dolphin or not self.dolphin.is_connected:
                     console_logger.info("Trying to hook Dolphin...")
+                    _report_handler("INFO: Trying to hook Dolphin...", self.dolphin_mgr)
                     if not await self._try_hook_dolphin():
                         await asyncio.sleep(2)
                         continue
@@ -359,6 +375,7 @@ class MKWiiContext(CommonContext):
                     self.dolphin.read_all_unlock_bytes()
                 except Exception:
                     console_logger.warning("Lost Dolphin connection, retrying...")
+                    _report_handler("WARNING: Lost Dolphin connection, retrying...", self.dolphin_mgr)
                     self.dolphin.unhook()
                     continue
                 
@@ -371,6 +388,7 @@ class MKWiiContext(CommonContext):
                 break
             except Exception as e:
                 console_logger.error(f"Poll error: {e}")
+                _report_handler(f"ERROR: Poll error: {e}", self.dolphin_mgr)
                 await asyncio.sleep(2)
 
     # Vanilla unlock blocking
@@ -421,9 +439,11 @@ class MKWiiContext(CommonContext):
 
             for name in blocked:
                 logger.warning(f"Blocked vanilla unlock: {name}")
+                _report_handler(f"WARNING: Blocked vanilla unlock: {name}", self.dolphin_mgr)
 
         except Exception as e:
             console_logger.error(f"Error in vanilla unlock blocking: {e}")
+            _report_handler(f"ERROR: Error in vanilla unlock blocking: {e}", self.dolphin_mgr)
 
     # Location checking
 
@@ -431,6 +451,7 @@ class MKWiiContext(CommonContext):
         from worlds.mkwii.locations import location_table
         self.location_name_to_id = {name: data.code for name, data in location_table.items()}
         console_logger.info(f"Location lookup: {len(self.location_name_to_id)} entries")
+        _report_handler(f"INFO: Location lookup: {len(self.location_name_to_id)} entries", self.dolphin_mgr)
 
     def _populate_tracker_from_checked(self) -> None:
         """Reconstruct completion state from previously checked location IDs."""
@@ -453,6 +474,8 @@ class MKWiiContext(CommonContext):
             f"Loaded {len(self.completed_locations)} completions from "
             f"{len(self.checked_locations)} checked locations"
         )
+        _report_handler(f"INFO: Loaded {len(self.completed_locations)} completions from "
+                        f"{len(self.checked_locations)} checked locations", self.dolphin_mgr)
         launch_tracker(self)
 
     async def check_locations(self) -> None:
@@ -490,11 +513,13 @@ class MKWiiContext(CommonContext):
                     new_locations.append(loc_id)
                     self._pending_location_ids.add(loc_id)
                     console_logger.info(f"New check: {loc_name}")
+                    _report_handler(f"INFO: New check: {loc_name}", self.dolphin_mgr)
                     self._update_completion(cup_name, cc, tier)
 
         if new_locations:
             await self.send_msgs([{"cmd": "LocationChecks", "locations": new_locations}])
             console_logger.info(f"Sent {len(new_locations)} location checks")
+            _report_handler(f"INFO: Sent {len(new_locations)} location checks", self.dolphin_mgr)
 
         # Clean up pending set: anything the server has confirmed can be removed
         self._pending_location_ids -= self.checked_locations

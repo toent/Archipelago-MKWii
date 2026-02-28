@@ -205,3 +205,4 @@ Thumbs.db
 # MKWii AP
 mkwii_ap_config.json
 mkwii_client.spec
+report.log
