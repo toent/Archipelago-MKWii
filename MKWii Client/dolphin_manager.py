@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 from typing import Optional
+from reporting import report_handler as _report_handler
 
 logger = logging.getLogger("MKWii.Dolphin")
 
@@ -58,6 +59,7 @@ class DolphinManager:
                 json.dump(self.config, f, indent=2)
         except Exception as e:
             logger.warning(f"Could not save config: {e}")
+            _report_handler(f"WARNING: Could not save config: {e}", self)
 
     # Path discovery
 
@@ -113,6 +115,7 @@ class DolphinManager:
             return path or ""
         except Exception as e:
             logger.error(f"File dialog failed: {e}")
+            _report_handler(f"ERROR: File dialog failed: {e}", self)
             path = input("Enter path to rksys.dat: ").strip().strip('"')
             return path or ""
 
@@ -148,6 +151,7 @@ class DolphinManager:
             return path or ""
         except Exception as e:
             logger.error(f"File dialog failed: {e}")
+            _report_handler(f"ERROR: File dialog failed: {e}", self)
             path = input("Enter path to MKWii PAL ISO: ").strip().strip('"')
             return path or ""
 
@@ -200,6 +204,7 @@ class DolphinManager:
                 return path
         except Exception as e:
             logger.error(f"File dialog failed: {e}")
+            _report_handler(f"ERROR: File dialog failed: {e}", self)
             path = input("Enter path to Dolphin.exe: ").strip().strip('"')
             if path and os.path.isfile(path):
                 self.config["dolphin_exe"] = path
@@ -211,9 +216,11 @@ class DolphinManager:
         dolphin_exe = self.find_dolphin_exe()
         if not dolphin_exe:
             logger.info("Dolphin.exe not found, please select it...")
+            _report_handler("INFO: Dolphin.exe not found, please select it...", self)
             dolphin_exe = self.pick_dolphin_exe()
         if not dolphin_exe:
             logger.error("Could not find Dolphin.exe")
+            _report_handler("ERROR: Could not find Dolphin.exe", self)
             return False
 
         try:
@@ -222,9 +229,11 @@ class DolphinManager:
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
             logger.info(f"Launched Dolphin (PID {self._dolphin_process.pid})")
+            _report_handler(f"INFO: Launched Dolphin (PID {self._dolphin_process.pid})", self)
             return True
         except Exception as e:
             logger.error(f"Failed to launch Dolphin: {e}")
+            _report_handler(f"ERROR: Failed to launch Dolphin: {e}", self)
             return False
 
     def is_dolphin_running(self) -> bool:
@@ -324,26 +333,32 @@ class DolphinManager:
         save_path = self.get_save_path()
         if not save_path:
             logger.error("No save file selected")
+            _report_handler("ERROR: No save file selected", self)
             return False
 
         empty_save = os.path.join(self._script_dir, BUNDLED_EMPTY_SAVE)
         if not os.path.isfile(empty_save):
             logger.error(f"Bundled empty save not found: {empty_save}")
+            _report_handler(f"ERROR: Bundled empty save not found: {empty_save}", self)
             return False
 
         backup_path = save_path + ".backup"
         try:
             shutil.copy2(save_path, backup_path)
             logger.info(f"Backed up existing save to: {backup_path}")
+            _report_handler
         except Exception as e:
             logger.warning(f"Failed to backup existing save: {e}")
+            _report_handler(f"WARNING: Failed to backup existing save: {e}", self)
 
         try:
             shutil.copy2(empty_save, save_path)
             logger.info("Replaced existing save with empty save")
+            _report_handler("INFO: Replaced existing save with empty save", self)
             return True
         except Exception as e:
             logger.error(f"Failed to replace save with empty: {e}")
+            _report_handler(f"ERROR: Failed to replace save with empty: {e}", self)
             return False
 
     # Setup wizard
