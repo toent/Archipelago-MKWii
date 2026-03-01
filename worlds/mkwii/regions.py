@@ -10,6 +10,9 @@ if typing.TYPE_CHECKING:
 
 from .locations import MKWiiLocation, location_table, CUPS, TRACKS
 
+_CC_INDEX = ["50cc", "100cc", "150cc", "Mirror"]
+_DIFFICULTY_INDEX = ["3rd_place", "2nd_place", "1st_place", "1_star", "2_star", "3_star"]
+
 
 def create_regions(world: "MKWiiWorld") -> None:
     """Create the region graph: Menu -> Cup/CC regions -> Victory."""
@@ -20,6 +23,9 @@ def create_regions(world: "MKWiiWorld") -> None:
     enabled_tiers = world.options.enabled_cup_check_tiers.value
     include_races = world.options.include_race_checks.value
 
+    goal_cc_str = _CC_INDEX[world.options.goal_cc.value]
+    goal_difficulty_str = _DIFFICULTY_INDEX[world.options.goal_difficulty.value]
+
     menu = Region("Menu", player, multiworld)
     multiworld.regions.append(menu)
 
@@ -28,8 +34,15 @@ def create_regions(world: "MKWiiWorld") -> None:
             region_name = f"{cup} {cc}"
             region = Region(region_name, player, multiworld)
 
-            # Cup completion checks
-            for difficulty in enabled_tiers:
+            # Cup completion checks.
+            # Always include the goal difficulty tier for the goal CC so the
+            # victory condition can be satisfied even when that tier was not
+            # listed in enabled_cup_check_tiers.
+            difficulties_to_create = set(enabled_tiers)
+            if cc == goal_cc_str:
+                difficulties_to_create.add(goal_difficulty_str)
+
+            for difficulty in difficulties_to_create:
                 loc_name = f"{cup} {cc} - {difficulty.replace('_', ' ').title()}"
                 if loc_name in location_table:
                     loc = MKWiiLocation(player, loc_name, location_table[loc_name].code, region)

@@ -48,7 +48,12 @@ def _build_location_table() -> typing.Dict[str, LocationData]:
     for cup in CUPS:
         for cc in CCS:
             for difficulty in DIFFICULTY_TIERS:
-                name = f"{cup} {cc} - {difficulty.replace('_', ' ').title()}"
+                if difficulty.__contains__("star"):
+                    # Captitalize the word star.
+                    name = f"{cup} {cc} - {difficulty.replace('_', ' ').title()}"
+                else:
+                    # Dont cause weird capitalization of 1st/2nd/3rd.
+                    name = f"{cup} {cc} - {difficulty.replace('_', ' ')}"
                 table[name] = LocationData(code=loc_id, cup=cup, cc=cc, difficulty=difficulty)
                 loc_id += 1
 
