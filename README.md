@@ -25,11 +25,12 @@ presently, Archipelago is also the randomizer itself.
 
 ### Good to know:
 * The client might not connect to dolphin properly sometimes eventhough some text says it is, use `/status` in the text client to check for connection or check the tracker window. To fix this, just restart the client and try again.
-* When generating with the `mkwii.apworld` make sure to keep `include_race_checks` and `enable_mid_race_memory_features` set to __False__ in your YAML, the options are just there for future development, but have no place yet in the client and __will not be unlockable__.
+* When generating with the `mkwii.apworld` make sure to keep `enable_traps` set to __False__ in your YAML, the options are just there for future development, but have no place yet in the client and __will not be unlockable__.
 * Do __NOT__ use the speedup feature included in Dolphin as it has been known to skip over checks.
 * In the current version trap or filler items do not do anything yet. There is plans for them for later.
 * If you get any directory errors regarding saves or gecko codes not loading, add `"dolphin_user_dir":"Y:/our/Filepath/Dolphin Emulator"` as the next entry in the `mkwii_ap_config.json`.
     * You can easily find your Dolphin Userdata by opening dolphin right-clicking a game and clicking `Open Wii Save Folder`, and then navigate back until you are in the `Dolphin Emulator` folder (this is the directory the client will need).
+* When using automatic dolphin startup, make sure all other instances of dolphin are closed (as well as any dolphin library windows).
 * For **Linux** make sure to use the use the **flatpak** version of Dolphin, other versions will **not** work.
 
 ### Current Features:
@@ -39,14 +40,14 @@ presently, Archipelago is also the randomizer itself.
 - Grand Prix ranking location checks (per CC).
 - Vanilla unlock blocking.
 - Achieve [x] rank on [y] cups on [z]CC for Goal options.
-- Useless, non-functional filler items.
+- Item unlocks.
+- Functional, usefull filler items.
+- Individual race location checks.
 
 #### What features are **not** currently available (but are planned for the future)?
-- Item unlocks.
-- Functional, functional filler items.
 - Traps.
-- Individual race location checks.
 - Time trials location checks.
+- Default unlocked characters, vehicle & cup blocking
 
 ## Arcipelago History
 
