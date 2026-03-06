@@ -57,6 +57,9 @@ _LAP_OFFSET       = 0x25
 # Item holder offsets (relative to item-holder pointer for a player)
 _ITEM_ID_OFFSET    = 0x8C
 _ITEM_COUNT_OFFSET = 0x90
+_GM_ACTIVATION_FLAG_OFFSET = 0xA4
+_GM_TIMER_OFFSET           = 0xA8
+_GM_SECONDARY_TIMER_OFFSET = 0xAC
 
 # In game item IDs
 ITEM_ID: Dict[str, int] = {
@@ -472,6 +475,10 @@ class ItemSlotManager:
         count = _ITEM_COUNT_MAP.get(item_id, 1)
         _write_u32(ih_ptr + _ITEM_ID_OFFSET,    item_id)
         _write_u32(ih_ptr + _ITEM_COUNT_OFFSET, count)
+        if item_id == ITEM_ID["Golden Mushroom"]:
+            _write_u32(ih_ptr + _GM_ACTIVATION_FLAG_OFFSET, 0x01000000)  # activation flag
+            _write_u32(ih_ptr + _GM_TIMER_OFFSET, 0x000001C0)  # main timer  (448 frames)
+            _write_u32(ih_ptr + _GM_SECONDARY_TIMER_OFFSET, 0x000001B6)  # secondary timer (438 frames)
         logger.info(f"[ItemSlot] Wrote: {game_item_name} (id=0x{item_id:02X} count={count})")
         return True
 
