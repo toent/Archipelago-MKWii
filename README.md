@@ -5,7 +5,7 @@ presently, Archipelago is also the randomizer itself.
 
 ## MKWii
 ### Things you will need:
-* An __unmodified PAL__ Mario Kart Wii ROM
+* An **unmodified PAL** Mario Kart Wii ROM
 * [Dolphin 2512](https://dolphin-emu.org/download/release/2512/) (Dolphin 5 or higher is the minimum)
 * [Latest MKWii Client and APWorld Release](https://github.com/toent/Archipelago-MKWii/releases/latest)
 * [TKinter (LINUX ONLY)](https://www.geeksforgeeks.org/installation-guide/how-to-install-tkinter-on-linux/) (+ [Python 3.13.12](https://www.python.org/downloads/release/python-31312/) and [Git](https://git-scm.com/install/) are needed)
@@ -23,14 +23,14 @@ presently, Archipelago is also the randomizer itself.
 10. Follow other instructions posed by the client and connect to the Archipelago.
 11. The client includes a text client and tracker window, they will open automatically.
 
-### Good to know:
+### Good to know (READ THIS):
 * The client might not connect to dolphin properly sometimes eventhough some text says it is, use `/status` in the text client to check for connection or check the tracker window. To fix this, just restart the client and try again.
-* When generating with the `mkwii.apworld` make sure to keep `enable_traps` set to __False__ in your YAML, the options are just there for future development, but have no place yet in the client and __will not be unlockable__.
-* Do __NOT__ use the speedup feature included in Dolphin as it has been known to skip over checks.
-* In the current version trap or filler items do not do anything yet. There is plans for them for later.
-* If you get any directory errors regarding saves or gecko codes not loading, add `"dolphin_user_dir":"Y:/our/Filepath/Dolphin Emulator"` as the next entry in the `mkwii_ap_config.json`.
+* When generating with the `mkwii.apworld` make sure to keep `enable_traps` set to **False** in your YAML, the options are just there for future development, but have no place yet in the client and **will not be unlockable**.
+* Do **NOT** use the speedup feature included in Dolphin as it has been known to skip over checks.
+* If you get any directory errors regarding saves not loading, add `"dolphin_user_dir":"Y:/our/Filepath/Dolphin Emulator"` as the next entry in the `mkwii_ap_config.json`.
     * You can easily find your Dolphin Userdata by opening dolphin right-clicking a game and clicking `Open Wii Save Folder`, and then navigate back until you are in the `Dolphin Emulator` folder (this is the directory the client will need).
 * When using automatic dolphin startup, make sure all other instances of dolphin are closed (as well as any dolphin library windows).
+* Individual race checks **can** be completed through VS-Race as well.
 * For **Linux** make sure to use the use the **flatpak** version of Dolphin, other versions will **not** work.
 
 ### Current Features:
