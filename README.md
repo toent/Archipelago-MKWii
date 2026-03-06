@@ -47,7 +47,7 @@ presently, Archipelago is also the randomizer itself.
 #### What features are **not** currently available (but are planned for the future)?
 - Traps.
 - Time trials location checks.
-- Default unlocked characters, vehicle & cup blocking
+- Default unlocked characters, vehicle & cup blocking.
 
 ## Arcipelago History
 
