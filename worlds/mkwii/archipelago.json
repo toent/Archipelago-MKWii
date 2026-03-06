@@ -1,9 +1,9 @@
 {
   "game": "Mario Kart Wii",
   "package_name": "mkwii",
-  "version": 1,
+  "world_version": "0.1.0",
+  "minimum_ap_version": "0.6.6",
   "display_name": "Mario Kart Wii",
   "authors": ["toent"],
-  "description": "Race through Mario Kart Wii cups and tracks in a multiworld randomizer",
-  "requires": []
+  "description": "Race through Mario Kart Wii cups and tracks in a multiworld randomizer"
 }
