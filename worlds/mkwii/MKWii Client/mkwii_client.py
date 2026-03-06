@@ -46,7 +46,7 @@ from pathlib import Path
 from typing import Dict, Optional, Set, Tuple
 
 # Resolve imports from parent Archipelago directory
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../.."))
 
 from CommonClient import (
     ClientCommandProcessor, CommonContext, get_base_parser, gui_enabled, logger, server_loop,
