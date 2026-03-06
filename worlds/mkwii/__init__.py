@@ -70,10 +70,6 @@ class MKWiiWorld(World):
         "Bullet Bike", "Nanobike", "Bon Bon",
         "Mach Bike", "Bowser Bike",
     ]
-    STARTING_POWERUPS: typing.ClassVar[typing.List[str]] = [
-        "Banana", "Green Shell", "Mushroom",
-    ]
-
     def create_regions(self) -> None:
         create_regions(self)
 
@@ -109,33 +105,34 @@ class MKWiiWorld(World):
         for name in BIKE_ITEMS:
             item_pool.append(self.create_item(name))
 
-        # Powerups and traps require mid-race memory features
-        if self.options.enable_mid_race_memory_features.value:
-            for name in POWERUP_ITEMS:
-                item_pool.append(self.create_item(name))
+        total_locations = len(self.multiworld.get_unfilled_locations(self.player))
+        needed_items = total_locations - len(item_pool)
 
-            total_locations = len(self.multiworld.get_unfilled_locations(self.player))
+        if self.options.enable_item_randomization.value:
+            starting = self.options.starting_items.value  # set of bare game names
+            for name in POWERUP_ITEMS:
+                # Strip "Powerup: " prefix to get the bare game name for comparison
+                game_name = name.replace("Powerup: ", "", 1)
+                if game_name not in starting:
+                    item_pool.append(self.create_item(name))
             needed_items = total_locations - len(item_pool)
 
-            # Split filler/trap slots based on trap percentage
-            trap_pct = self.options.trap_percentage.value / 100.0
-            num_traps = int(needed_items * trap_pct)
+            if self.options.enable_traps.value:
+                trap_pct = self.options.trap_percentage.value / 100.0
+                num_traps = int(needed_items * trap_pct)
+                trap_weights = self._get_trap_weights()
+                if trap_weights and num_traps > 0:
+                    trap_names = list(trap_weights.keys())
+                    weights = list(trap_weights.values())
+                    for _ in range(num_traps):
+                        trap = choices(trap_names, weights=weights)[0]
+                        item_pool.append(self.create_item(trap))
+                    needed_items -= num_traps
 
-            # Build weighted trap pool
-            trap_weights = self._get_trap_weights()
-            if trap_weights and num_traps > 0:
-                trap_names = list(trap_weights.keys())
-                weights = list(trap_weights.values())
-                for _ in range(num_traps):
-                    trap = choices(trap_names, weights=weights)[0]
-                    item_pool.append(self.create_item(trap))
-
-            for _ in range(needed_items - num_traps):
+            for _ in range(needed_items):
                 item_pool.append(self.create_filler())
         else:
-            # Fill remaining slots with inert filler
-            total_locations = len(self.multiworld.get_unfilled_locations(self.player))
-            needed_items = total_locations - len(item_pool)
+            # Item randomization disabled — fill with inert filler only
             for _ in range(needed_items):
                 item_pool.append(self.create_item("Filler: Random Item"))
 
@@ -178,6 +175,12 @@ class MKWiiWorld(World):
             "enabled_ccs": list(self.options.enabled_ccs.value),
             "enabled_cup_check_tiers": list(self.options.enabled_cup_check_tiers.value),
             "include_race_checks": self.options.include_race_checks.value,
+            "enable_item_randomization": bool(self.options.enable_item_randomization.value),
+            "enable_traps": bool(self.options.enable_traps.value),
+            "starting_items": list(self.options.starting_items.value),
+            "random_item_mode": (
+                "uniform" if self.options.random_item_mode.value == 1 else "placement"
+            ),
             "cups_required_for_goal": self.options.cups_required_for_goal.value,
             "goal_difficulty": self.options.goal_difficulty.value,
             "goal_cc": self.options.goal_cc.value,

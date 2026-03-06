@@ -20,6 +20,7 @@ Expected directory layout:
             mkwii_client.py     (this file)
             dolphin_memory.py
             dolphin_manager.py
+            item_slot_manager.py
             tracker.py
             Saves/
 """
@@ -56,6 +57,7 @@ from dolphin_memory import (
     CHARACTER_IDS, VEHICLE_IDS, CUP_UNLOCK_IDS, MODE_IDS, ALL_UNLOCK_IDS,
     CUP_TROPHY_IDS, DolphinMemoryManager, get_vehicle_alternates,
 )
+from item_slot_manager import ItemSlotManager, AP_TO_GAME
 from tracker import launch_tracker
 
 # Console logger for verbose output that should not appear in the AP GUI
@@ -84,8 +86,6 @@ for _t in TIER_HIERARCHY:
     TIER_NORMALIZE[_readable.lower()] = _t
 
 # Seconds to wait after sending F-key before re-hooking to Dolphin.
-# Dolphin needs time to decompress and apply the savestate; 8s handles slow machines
-# and mid-gameplay loads where the save system takes longer to reinitialize.
 POST_LOAD_SETTLE_SECS = 8.0
 
 # Seconds to suppress all blocking after a savestate load to let memory stabilize.
@@ -105,6 +105,13 @@ class MKWiiCommandProcessor(ClientCommandProcessor):
                         f"Karts: {len(ctx.unlocked_karts)}  "
                         f"Bikes: {len(ctx.unlocked_bikes)}")
             self.output(f"  Checked locations: {len(ctx.checked_locations)}")
+            if ctx._item_slot_mgr:
+                mgr = ctx._item_slot_mgr
+                self.output(
+                    f"  Item pool: {len(mgr.unlocked_items)} items unlocked  "
+                    f"Targeted queue: {len(mgr._targeted_queue)}  "
+                    f"Filler queue: {len(mgr._filler_queue)}"
+                )
         else:
             self.output("Not connected to Dolphin")
 
@@ -155,7 +162,6 @@ class MKWiiContext(CommonContext):
         # Internal state
         self.slot_data: dict = {}
         self.seed: Optional[str] = None
-        self.backup_dir: Optional[Path] = None
         self.goal_reached: bool = False
         self._memory_poll_task: Optional[asyncio.Task] = None
         self._initial_state_loaded: bool = False
@@ -165,6 +171,9 @@ class MKWiiContext(CommonContext):
         # True while a load is in progress - poll loop must not interfere
         self._loading_state: bool = False
 
+        # Item slot manager (created once room_id / seed is known)
+        self._item_slot_mgr: Optional[ItemSlotManager] = None
+
     async def server_auth(self, password_requested: bool = False) -> None:
         if password_requested and not self.password:
             await super().server_auth(password_requested)
@@ -172,29 +181,45 @@ class MKWiiContext(CommonContext):
         await self.send_connect()
 
     def on_package(self, cmd: str, args: dict) -> None:
+        
         if cmd == "RoomInfo":
             self.seed = args.get("seed_name", "unknown")
-            self.backup_dir = (
-                Path.home() / "Documents" / "Dolphin Emulator" / "MKWii_AP_Backups" / self.seed
-            )
-            self.backup_dir.mkdir(parents=True, exist_ok=True)
 
         elif cmd == "Connected":
             self.slot_data = args.get("slot_data", {})
             console_logger.info(f"Slot data keys: {list(self.slot_data.keys())}")
 
-            if not self.seed:
-                self.seed = f"team{args.get('team', 0)}_slot{args.get('slot', 0)}"
-                self.backup_dir = (
-                    Path.home() / "Documents" / "Dolphin Emulator" / "MKWii_AP_Backups" / self.seed
-                )
-                self.backup_dir.mkdir(parents=True, exist_ok=True)
-
             self._build_location_lookup()
             self._populate_tracker_from_checked()
+
+            if not self.seed:
+                self.seed = f"team{args.get('team', 0)}_slot{args.get('slot', 0)}"
+
+            # Build item slot manager once seed/room_id is confirmed
+            random_mode = self.slot_data.get("random_item_mode", "placement")
+            base_dir = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent
+            queue_dir = base_dir / "itemqueues"
+            self._item_slot_mgr = ItemSlotManager(
+                room_id                   = self.seed,
+                queue_dir                 = queue_dir,
+                random_item_mode          = random_mode,
+                starting_items            = self.slot_data.get("starting_items"),
+                enable_item_randomization = self.slot_data.get("enable_item_randomization", True),
+            )
+            # Re-sync unlocked powerup pool from already-received items
+            self._resync_item_slot_pool()
+            asyncio.create_task(self._item_slot_mgr.run_inject_loop())
+            console_logger.info(
+                f"[ItemSlot] Manager ready — pool: {len(self._item_slot_mgr.unlocked_items)} items, "
+                f"mode: {random_mode}"
+            )
+            _report_handler(
+                f"INFO: [ItemSlot] Manager ready — pool: {len(self._item_slot_mgr.unlocked_items)} items, "
+                f"mode: {random_mode}", self.dolphin_mgr
+            )
+
             if not self._memory_poll_task:
                 self._memory_poll_task = asyncio.create_task(self._poll_dolphin())
-
 
         elif cmd == "ReceivedItems":
             self._handle_received_items(args)
@@ -210,10 +235,10 @@ class MKWiiContext(CommonContext):
         for i, item in enumerate(args["items"]):
             name = id_to_name.get(item.item, f"Unknown({item.item})")
             console_logger.info(f"Received #{start_index + i}: {name}")
-            self._process_item(name)
+            self._process_item(name, item.player, item.location)
 
-    def _process_item(self, item_name: str) -> None:
-        """Route a received item to the appropriate unlock set and apply it."""
+    def _process_item(self, item_name: str, sender_player: int = 0, location_id: int = 0) -> None:
+        """Route a received item to the appropriate unlock set / item slot queue."""
         if "Character:" in item_name:
             char = item_name.replace("Character: ", "")
             self.unlocked_characters.add(char)
@@ -232,7 +257,6 @@ class MKWiiContext(CommonContext):
             self.unlocked_cups.add(item_name)
             self._apply_unlock(item_name, "cup")
             if "mirror" in item_name.lower():
-                # Mirror cups require mirror mode to be accessible
                 self.unlocked_modes.add("Mirror mode")
                 if self.dolphin and self.dolphin.is_connected:
                     self.dolphin.unlock_mirror_mode()
@@ -241,8 +265,27 @@ class MKWiiContext(CommonContext):
             self.unlocked_modes.add(item_name)
             self._apply_unlock(item_name, "mode")
 
-        elif "Filler:" in item_name or "Trap" in item_name:
-            console_logger.debug(f"Non-unlock item: {item_name}")
+        elif (
+            item_name.startswith("Powerup:")
+            or item_name.startswith("Filler:")
+            or item_name.endswith("Trap")
+        ):
+            if item_name.startswith("Powerup:") and self._item_slot_mgr:
+                game_name = AP_TO_GAME.get(item_name)
+                if game_name:
+                    self._item_slot_mgr.unlock_item_in_pool(game_name)
+                    console_logger.info(f"[ItemSlot] Pool unlock: {item_name} -> {game_name}")
+                    _report_handler(
+                        f"INFO: [ItemSlot] Pool unlock: {item_name} -> {game_name}",
+                        self.dolphin_mgr
+                    )
+
+            if self._item_slot_mgr:
+                self._item_slot_mgr.receive_item(item_name, sender_player, location_id)
+            else:
+                console_logger.debug(
+                    f"[ItemSlot] Manager not ready yet, item may be dropped: {item_name}"
+                )
 
     def _apply_unlock(self, name: str, category: str) -> None:
         """Write a single unlock to Dolphin memory if connected."""
@@ -283,6 +326,34 @@ class MKWiiContext(CommonContext):
         if count:
             logger.info(f"Re-applied {count} AP unlocks")
 
+    def _resync_item_slot_pool(self) -> None:
+        """
+        Re-unlock all Powerup: items previously received so the item slot
+        manager's pool reflects the full progression state. Called once after
+        the ItemSlotManager is created (on Connected).
+        """
+        if not self._item_slot_mgr:
+            return
+        try:
+            from worlds.mkwii.items import item_table
+            id_to_name = {data.code: name for name, data in item_table.items()}
+            count = 0
+            for loc_id in self.checked_locations:
+                name = id_to_name.get(loc_id)
+                if name and name.startswith("Powerup:"):
+                    game_name = AP_TO_GAME.get(name)
+                    if game_name:
+                        self._item_slot_mgr.unlock_item_in_pool(game_name)
+                        count += 1
+            if count:
+                console_logger.info(f"[ItemSlot] Re-synced {count} powerups into pool")
+                _report_handler(
+                    f"INFO: [ItemSlot] Re-synced {count} powerups into pool",
+                    self.dolphin_mgr
+                )
+        except Exception as e:
+            console_logger.warning(f"[ItemSlot] Pool re-sync error: {e}")
+
     # Dolphin connection
 
     async def _try_hook_dolphin(self) -> bool:
@@ -312,7 +383,6 @@ class MKWiiContext(CommonContext):
         if self.dolphin is None:
             self.dolphin = DolphinMemoryManager(license_num=1, logger=console_logger)
 
-        # Prevent poll loop from interfering
         self._loading_state = True
         if not self.dolphin._hooked:
             asyncio.sleep(1)
@@ -323,7 +393,6 @@ class MKWiiContext(CommonContext):
                     logger.info("Hooked to Dolphin via /hook")
                     _report_handler("INFO: Hooked to Dolphin via /hook", self.dolphin_mgr)
                     self._apply_all_received_items()
-
                     return
 
                 if attempt in (5, 15, 25):
@@ -336,13 +405,12 @@ class MKWiiContext(CommonContext):
             _report_handler("WARNING: /hook failed after 30 attempts - poll loop will retry", self.dolphin_mgr)
 
         finally:
-            # Always release so poll loop can resume
             self._loading_state = False
 
-    # Polling loop: continuously monitor Dolphin memory for changes and enforce AP state 
+    # Polling loop
 
     async def _poll_dolphin(self) -> None:
-        """Main loop: connect to Dolphin, check locations, enforce AP state."""
+        """Main loop: connect to Dolphin, check locations, enforce AP state, inject items."""
         console_logger.info("Starting Dolphin memory poll...")
         _report_handler("INFO: Starting Dolphin memory poll...", self.dolphin_mgr)
         if self.dolphin is None:
@@ -359,7 +427,6 @@ class MKWiiContext(CommonContext):
                     self.dolphin_mgr.focus_game_window()
                 await asyncio.sleep(0.5)
 
-                # Don't touch Dolphin while a load is in progress
                 if self._loading_state:
                     continue
 
@@ -378,11 +445,20 @@ class MKWiiContext(CommonContext):
                     _report_handler("WARNING: Lost Dolphin connection, retrying...", self.dolphin_mgr)
                     self.dolphin.unhook()
                     continue
-                
+
                 await self.dolphin.async_patch_vanilla_unlock_block()
                 await self._block_vanilla_unlocks()
                 await self.check_locations()
-                # await self._check_goal()
+
+                # Item slot injection + race check
+                if self._item_slot_mgr:
+                    include_race = self.slot_data.get("include_race_checks", False)
+                    race_callback = (
+                        lambda t, c: asyncio.create_task(self._on_race_first_place(t, c))
+                        if include_race else None
+                    )
+                    if self._item_slot_mgr:
+                        self._item_slot_mgr.poll(on_race_check=race_callback)
 
             except asyncio.CancelledError:
                 break
@@ -392,19 +468,9 @@ class MKWiiContext(CommonContext):
                 await asyncio.sleep(2)
 
     # Vanilla unlock blocking
+
     async def _block_vanilla_unlocks(self) -> None:
-        """Detect and revert any unlocks not granted by AP.
-
-        Strategy:
-          1. Scan for unauthorized unlock bits
-          2. Bit-lock them immediately (prevents flicker)
-          3. Load savestate to wipe the GP data causing re-derivation
-          4. Re-apply AP unlocks
-
-        The game always re-derives unlock bits from GP completion data,
-        so bit-locking alone is a losing battle - the savestate load is
-        what actually fixes it.
-        """
+        """Detect and revert any unlocks not granted by AP."""
         if not self.dolphin or not self.dolphin.is_connected:
             return
 
@@ -432,7 +498,6 @@ class MKWiiContext(CommonContext):
                 return
 
             if self.dolphin.is_connected:
-                # Bit-lock any unauthorized bits
                 for name in blocked:
                     if name in ALL_UNLOCK_IDS:
                         self.dolphin.lock_item(name)
@@ -474,8 +539,10 @@ class MKWiiContext(CommonContext):
             f"Loaded {len(self.completed_locations)} completions from "
             f"{len(self.checked_locations)} checked locations"
         )
-        _report_handler(f"INFO: Loaded {len(self.completed_locations)} completions from "
-                        f"{len(self.checked_locations)} checked locations", self.dolphin_mgr)
+        _report_handler(
+            f"INFO: Loaded {len(self.completed_locations)} completions from "
+            f"{len(self.checked_locations)} checked locations", self.dolphin_mgr
+        )
         launch_tracker(self)
 
     async def check_locations(self) -> None:
@@ -483,9 +550,11 @@ class MKWiiContext(CommonContext):
         if not self.slot_data or not self.dolphin or not self.dolphin.is_connected:
             return
 
-        enabled_ccs = self.slot_data.get("enabled_ccs", ["50cc", "100cc", "150cc"])
-        enabled_tiers = self.slot_data.get("enabled_cup_check_tiers",
-                                           ["3rd_place", "2nd_place", "1st_place", "1_star", "2_star"])
+        enabled_ccs   = self.slot_data.get("enabled_ccs", ["50cc", "100cc", "150cc"])
+        enabled_tiers = self.slot_data.get(
+            "enabled_cup_check_tiers",
+            ["3rd_place", "2nd_place", "1st_place", "1_star", "2_star"]
+        )
 
         new_locations: list[int] = []
 
@@ -501,12 +570,17 @@ class MKWiiContext(CommonContext):
                 for tier in tiers:
                     if tier not in enabled_tiers:
                         continue
-                    loc_name = f"{cup_name} {cc} - {tier.replace('_', ' ').title()}"
-                    loc_id = self.location_name_to_id.get(loc_name)
+                    if tier.__contains__("star"):
+                        # Captitalize the word star.
+                        loc_name = f"{cup_name} {cc} - {tier.replace('_', ' ').title()}"
+                    else:
+                        # Dont cause weird capitalization of 1st/2nd/3rd.
+                        loc_name = f"{cup_name} {cc} - {tier.replace('_', ' ')}"
+                        
+                    loc_id   = self.location_name_to_id.get(loc_name)
                     if not loc_id:
                         continue
 
-                    # Skip if already confirmed OR already sent and awaiting confirm
                     if loc_id in self.checked_locations or loc_id in self._pending_location_ids:
                         continue
 
@@ -521,10 +595,33 @@ class MKWiiContext(CommonContext):
             console_logger.info(f"Sent {len(new_locations)} location checks")
             _report_handler(f"INFO: Sent {len(new_locations)} location checks", self.dolphin_mgr)
 
-        # Clean up pending set: anything the server has confirmed can be removed
         self._pending_location_ids -= self.checked_locations
 
         await self._check_goal()
+
+    async def _on_race_first_place(self, track_name: str, cc_name: str) -> None:
+        """
+        Callback from ItemSlotManager when P1 finishes 1st on a specific track.
+        Builds the location name, validates it exists, and sends the check once.
+        """
+        loc_name = f"{track_name} {cc_name} - 1st Place"
+        loc_id   = self.location_name_to_id.get(loc_name)
+
+        if not loc_id:
+            console_logger.warning(f"[ItemSlot] No location ID for race check: {loc_name!r}")
+            _report_handler(
+                f"WARNING: [ItemSlot] No location ID for race check: {loc_name!r}",
+                self.dolphin_mgr
+            )
+            return
+
+        if loc_id in self.checked_locations or loc_id in self._pending_location_ids:
+            return
+
+        self._pending_location_ids.add(loc_id)
+        await self.send_msgs([{"cmd": "LocationChecks", "locations": [loc_id]}])
+        console_logger.info(f"[ItemSlot] Race check sent: {loc_name}")
+        _report_handler(f"INFO: [ItemSlot] Race check sent: {loc_name}", self.dolphin_mgr)
 
     def _is_real_result(self, cup_id: int, cc: str, trophy: str, rank: str) -> bool:
         """Filter out fake trophies left over from a previous savestate."""
@@ -537,7 +634,7 @@ class MKWiiContext(CommonContext):
             return False
 
         trophy_val = {"none": 0, "bronze": 1, "silver": 2, "gold": 3}
-        rank_val = {"D": 0, "C": 1, "B": 2, "A": 3, "1_star": 4, "2_star": 5, "3_star": 6}
+        rank_val   = {"D": 0, "C": 1, "B": 2, "A": 3, "1_star": 4, "2_star": 5, "3_star": 6}
         if (trophy_val.get(trophy, 0) > trophy_val.get(fake_trophy, 0) or
                 (trophy == fake_trophy and rank_val.get(rank, 0) > rank_val.get(fake_rank, 0))):
             del self.fake_trophies[key]
@@ -555,16 +652,19 @@ class MKWiiContext(CommonContext):
             tiers.append("2nd_place")
         if trophy == "gold":
             tiers.append("1st_place")
-            star_tiers = {"1_star": ["1_star"], "2_star": ["1_star", "2_star"],
-                          "3_star": ["1_star", "2_star", "3_star"]}
+            star_tiers = {
+                "1_star": ["1_star"],
+                "2_star": ["1_star", "2_star"],
+                "3_star": ["1_star", "2_star", "3_star"],
+            }
             tiers.extend(star_tiers.get(rank, []))
         return tiers
 
     def _update_completion(self, cup: str, cc: str, tier: str) -> None:
-        key = (cup, cc)
+        key     = (cup, cc)
         current = self.completed_locations.get(key, "none")
         current_idx = TIER_HIERARCHY.index(current) if current in TIER_HIERARCHY else -1
-        new_idx = TIER_HIERARCHY.index(tier) if tier in TIER_HIERARCHY else -1
+        new_idx     = TIER_HIERARCHY.index(tier)     if tier     in TIER_HIERARCHY else -1
         if new_idx > current_idx:
             self.completed_locations[key] = tier
 
@@ -572,10 +672,10 @@ class MKWiiContext(CommonContext):
         if self.goal_reached or not self.slot_data:
             return
 
-        required = self.slot_data.get("cups_required_for_goal", 6)
-        goal_cc = CC_NAMES[self.slot_data.get("goal_cc", 2)]
-        goal_tier = TIER_HIERARCHY[min(self.slot_data.get("goal_difficulty", 3), len(TIER_HIERARCHY) - 1)]
-        goal_idx = TIER_HIERARCHY.index(goal_tier)
+        required   = self.slot_data.get("cups_required_for_goal", 6)
+        goal_cc    = CC_NAMES[self.slot_data.get("goal_cc", 2)]
+        goal_tier  = TIER_HIERARCHY[min(self.slot_data.get("goal_difficulty", 3), len(TIER_HIERARCHY) - 1)]
+        goal_idx   = TIER_HIERARCHY.index(goal_tier)
 
         count = 0
         for cup in CUPS:
@@ -584,7 +684,6 @@ class MKWiiContext(CommonContext):
                 achieved_idx = TIER_HIERARCHY.index(achieved)
 
                 if achieved_idx >= goal_idx:
-                    # Verify all lower tiers are also completed
                     valid_progression = True
                     for lower_idx in range(achieved_idx):
                         lower_tier = TIER_HIERARCHY[lower_idx]
@@ -597,7 +696,6 @@ class MKWiiContext(CommonContext):
 
                     if valid_progression:
                         count += 1
-                    
 
         if count >= required:
             self.goal_reached = True
@@ -606,7 +704,7 @@ class MKWiiContext(CommonContext):
             await self.send_msgs([{"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}])
 
 
-#Entry point
+# Entry point
 
 async def main() -> None:
     print("\n" + "=" * 60)
@@ -617,7 +715,7 @@ async def main() -> None:
 
     if "dolphin_auto_launch" not in mgr.config:
         mgr.show_dolphin_auto_launch_selection()
-    
+
     iso_path = None
     if mgr.config.get("dolphin_auto_launch", True):
         iso_path = mgr.config.get("iso_path")
@@ -639,13 +737,13 @@ async def main() -> None:
     mgr.show_main_menu_reminder()
 
     parser = get_base_parser()
-    args = parser.parse_args()
+    args   = parser.parse_args()
     if not args.connect:
         args.connect = input("Enter server address (e.g. archipelago.gg:12345): ").strip()
 
     ctx = MKWiiContext(args.connect, args.password)
-    ctx.dolphin_mgr = mgr
-    ctx.server_task = asyncio.create_task(server_loop(ctx), name="ServerLoop")
+    ctx.dolphin_mgr  = mgr
+    ctx.server_task  = asyncio.create_task(server_loop(ctx), name="ServerLoop")
 
     if gui_enabled:
         ctx.run_gui()

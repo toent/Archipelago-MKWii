@@ -44,7 +44,13 @@ def set_rules(world: "MKWiiWorld") -> None:
     # (i.e. the goal CC and goal difficulty tier were enabled for this player)
     goal_cups = []
     for cup in CUPS:
-        loc_name = f"{cup} {goal_cc} - {goal_difficulty.replace('_', ' ').title()}"
+        if goal_difficulty.__contains__("star"):
+            # Captitalize the word star.
+            loc_name = f"{cup} {cc} - {goal_difficulty.replace('_', ' ').title()}"
+        else:
+            # Dont cause weird capitalization of 1st/2nd/3rd.
+            loc_name = f"{cup} {cc} - {goal_difficulty.replace('_', ' ')}"
+            
         try:
             multiworld.get_location(loc_name, player)
             goal_cups.append(cup)

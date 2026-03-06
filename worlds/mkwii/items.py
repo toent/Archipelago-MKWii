@@ -126,6 +126,9 @@ POWERUP_ITEMS = {
     "Powerup: Lightning": ItemData(BASE_ID + 412),
     "Powerup: Triple Mushrooms": ItemData(BASE_ID + 413),
     "Powerup: Bullet Bill": ItemData(BASE_ID + 414),
+    "Powerup: Mushroom": ItemData(BASE_ID + 415),
+    "Powerup: Green Shell": ItemData(BASE_ID + 416),
+    "Powerup: Banana": ItemData(BASE_ID + 417),
 }
 
 
