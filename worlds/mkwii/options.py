@@ -9,7 +9,7 @@ class EnabledCCs(OptionSet):
     """Which engine classes (CCs) generate location checks. (options: 50cc, 100cc, 150cc, Mirror)"""
     display_name = "Enabled CCs"
     valid_keys = {"50cc", "100cc", "150cc", "Mirror"}
-    default = {"50cc", "100cc", "150cc"}
+    default = {"50cc", "100cc", "150cc", "Mirror"}
 
 
 class EnabledCupCheckTiers(OptionSet):
@@ -22,14 +22,7 @@ class EnabledCupCheckTiers(OptionSet):
 class IncludeRaceChecks(Toggle):
     """Include individual race 1st place checks in addition to cup checks."""
     display_name = "Include Race Checks"
-    default = False
-
-
-class EnableMidRaceMemoryFeatures(Toggle):
-    """Enable mid race memory features (powerups, traps, fillers). 
-    Disable for now as they are not implemented yet."""
-    display_name = "Enable Mid Race Memory Features"
-    default = False
+    default = True
 
 
 class CupsRequiredForGoal(Range):
@@ -59,7 +52,50 @@ class GoalCC(Choice):
     option_100cc = 1
     option_150cc = 2
     option_mirror = 3
-    default = 2  # 150cc
+    default = 3  # 150cc
+
+
+class EnableItemRandomization(Toggle):
+    """Enable mid-race item randomization. When enabled, items from item boxes
+    are replaced with AP-pool items, and filler/powerup items from the multiworld
+    are injected into the item slot during races."""
+    display_name = "Enable Item Randomization"
+    default = 1
+
+
+class StartingItems(OptionSet):
+    """Which items are available from the start before any Powerup items are
+    unlocked. These are the only items that can appear from item boxes at the
+    beginning of the game.
+    (options: Green Shell, Red Shell, Banana, Fake Item Box, Mushroom,
+    Triple Mushrooms, Bob-omb, Blue Shell, Lightning, Star, Golden Mushroom,
+    Mega Mushroom, Blooper, POW Block, Bullet Bill, Triple Green Shells,
+    Triple Red Shells, Triple Bananas)"""
+    display_name = "Starting Items"
+    valid_keys = {
+        "Green Shell", "Red Shell", "Banana", "Fake Item Box", "Mushroom",
+        "Triple Mushrooms", "Bob-omb", "Blue Shell", "Lightning", "Star",
+        "Golden Mushroom", "Mega Mushroom", "Blooper", "POW Block",
+        "Bullet Bill", "Triple Green Shells", "Triple Red Shells", "Triple Bananas",
+    }
+    default = {"Fake Item Box"}
+
+class RandomItemMode(Choice):
+    """How 'Filler: Random Item' is resolved during a race.
+    placement_weighted: weighted by GP placement odds for current position.
+    uniform: uniform random from all unlocked items."""
+    display_name = "Random Item Mode"
+    option_placement_weighted = 0
+    option_uniform            = 1
+    default                   = 0
+
+class EnableTraps(Toggle):
+    """Allow trap items to appear in the item pool.
+    Requires Enable Item Randomization. Trap weights below control which traps
+    appear and how often.
+    DISABLE FOR NOW! NO TRAPS ARE IMPLEMENTED YET!!!"""
+    display_name = "Enable Traps"
+    default = 0
 
 
 class TrapPercentage(Range):
@@ -123,7 +159,7 @@ class FillerItemQueueCap(Range):
     display_name = "Filler Item Queue Cap"
     range_start = 0
     range_end = 20
-    default = 5
+    default = 0
 
 
 class FillerWeightRandom(Range):
@@ -243,10 +279,13 @@ class MKWiiOptions(PerGameCommonOptions):
     enabled_ccs: EnabledCCs
     enabled_cup_check_tiers: EnabledCupCheckTiers
     include_race_checks: IncludeRaceChecks
-    enable_mid_race_memory_features: EnableMidRaceMemoryFeatures
     cups_required_for_goal: CupsRequiredForGoal
     goal_difficulty: GoalDifficulty
     goal_cc: GoalCC
+    enable_item_randomization: EnableItemRandomization
+    starting_items: StartingItems
+    random_item_mode: RandomItemMode
+    enable_traps: EnableTraps
     trap_percentage: TrapPercentage
     trap_weight_brake: TrapWeightBrake
     trap_weight_gas: TrapWeightGas

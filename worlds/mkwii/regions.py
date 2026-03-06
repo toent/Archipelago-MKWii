@@ -43,7 +43,13 @@ def create_regions(world: "MKWiiWorld") -> None:
                 difficulties_to_create.add(goal_difficulty_str)
 
             for difficulty in difficulties_to_create:
-                loc_name = f"{cup} {cc} - {difficulty.replace('_', ' ').title()}"
+                if difficulty.__contains__("star"):
+                    # Captitalize the word star.
+                    loc_name = f"{cup} {cc} - {difficulty.replace('_', ' ').title()}"
+                else:
+                    # Dont cause weird capitalization of 1st/2nd/3rd.
+                    loc_name = f"{cup} {cc} - {difficulty.replace('_', ' ')}"
+                    
                 if loc_name in location_table:
                     loc = MKWiiLocation(player, loc_name, location_table[loc_name].code, region)
                     region.locations.append(loc)

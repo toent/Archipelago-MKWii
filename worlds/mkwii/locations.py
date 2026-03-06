@@ -32,7 +32,7 @@ TRACKS = {
     "Special Cup": ["Dry Dry Ruins", "Moonview Highway", "Bowser's Castle", "Rainbow Road"],
     "Shell Cup": ["GCN Peach Beach", "DS Yoshi Falls", "SNES Ghost Valley 2", "N64 Mario Raceway"],
     "Banana Cup": ["N64 Sherbet Land", "GBA Shy Guy Beach", "DS Delfino Square", "GCN Waluigi Stadium"],
-    "Leaf Cup": ["DS Desert Hills", "GCN Bowser's Castle", "N64 DK's Jungle Parkway", "GC Mario Circuit"],
+    "Leaf Cup": ["DS Desert Hills", "GBA Bowser's Castle 3", "N64 DK's Jungle Parkway", "GCN Mario Circuit"],
     "Lightning Cup": ["SNES Mario Circuit 3", "DS Peach Gardens", "GCN DK Mountain", "N64 Bowser's Castle"],
 }
 
