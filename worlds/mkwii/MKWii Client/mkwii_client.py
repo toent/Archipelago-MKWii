@@ -672,37 +672,40 @@ class MKWiiContext(CommonContext):
         if self.goal_reached or not self.slot_data:
             return
 
-        required   = self.slot_data.get("cups_required_for_goal", 6)
-        goal_cc    = CC_NAMES[self.slot_data.get("goal_cc", 2)]
-        goal_tier  = TIER_HIERARCHY[min(self.slot_data.get("goal_difficulty", 3), len(TIER_HIERARCHY) - 1)]
-        goal_idx   = TIER_HIERARCHY.index(goal_tier)
+        required  = self.slot_data.get("cups_required_for_goal", 6)
+        goal_cc   = CC_NAMES[self.slot_data.get("goal_cc", 2)]
+        goal_tier = TIER_HIERARCHY[min(self.slot_data.get("goal_difficulty", 3), len(TIER_HIERARCHY) - 1)]
+        goal_idx  = TIER_HIERARCHY.index(goal_tier)
 
         count = 0
         for cup in CUPS:
             achieved = self.completed_locations.get((cup, goal_cc), "none")
-            if achieved in TIER_HIERARCHY:
-                achieved_idx = TIER_HIERARCHY.index(achieved)
+            achieved_idx = TIER_HIERARCHY.index(achieved) if achieved in TIER_HIERARCHY else -1
 
-                if achieved_idx >= goal_idx:
-                    valid_progression = True
-                    for lower_idx in range(achieved_idx):
-                        lower_tier = TIER_HIERARCHY[lower_idx]
-                        if self.completed_locations.get((cup, goal_cc)) != lower_tier and \
-                        TIER_HIERARCHY.index(
-                            self.completed_locations.get((cup, goal_cc), "none")
-                        ) < lower_idx:
-                            valid_progression = False
-                            break
+            if achieved_idx < goal_idx:
+                continue
 
-                    if valid_progression:
-                        count += 1
+            # All tiers below goal_tier must also be present in checked_locations
+            valid_progression = True
+            for lower_idx in range(goal_idx):
+                lower_tier = TIER_HIERARCHY[lower_idx]
+                if lower_tier.__contains__("star"):
+                    loc_name = f"{cup} {goal_cc} - {lower_tier.replace('_', ' ').title()}"
+                else:
+                    loc_name = f"{cup} {goal_cc} - {lower_tier.replace('_', ' ')}"
+                loc_id = self.location_name_to_id.get(loc_name)
+                if not loc_id or loc_id not in self.checked_locations:
+                    valid_progression = False
+                    break
+
+            if valid_progression:
+                count += 1
 
         if count >= required:
             self.goal_reached = True
             logger.info(f"GOAL COMPLETE: {count}/{required} cups at "
                         f"{goal_tier.replace('_', ' ')}+ on {goal_cc}")
             await self.send_msgs([{"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}])
-
 
 # Entry point
 
