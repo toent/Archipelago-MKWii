@@ -4,25 +4,20 @@ Location tracker window for Mario Kart Wii AP Client.
 Styled to replicate the in-game license/profile screen aesthetic.
 Displays a grid of cup/CC completions with live updates.
 Runs in a separate thread to avoid blocking the async event loop.
+
+Ported from tkinter to Kivy to match the rest of the AP client UI stack.
+Visual output is intentionally identical to the original tkinter version.
 """
 import sys
 import threading
-import tkinter as tk
 from pathlib import Path
-from tkinter import ttk, font as tkfont
 from typing import TYPE_CHECKING, Dict, Optional, Tuple
-
-try:
-    from PIL import Image, ImageTk
-    PIL_AVAILABLE = True
-except ImportError:
-    PIL_AVAILABLE = False
 
 if TYPE_CHECKING:
     from mkwii_client import MKWiiContext
 
 # Asset paths
-if getattr(sys, 'frozen', False):
+if getattr(sys, "frozen", False):
     _HERE = Path(sys.executable).parent
 else:
     _HERE = Path(__file__).parent
@@ -31,304 +26,429 @@ IMG_DIR   = _HERE / "img"
 IMG_MKWII = IMG_DIR / "mkwiiLicenseImage.png"
 IMG_AP    = IMG_DIR / "AP_Asset_Pack" / "color-icon.png"
 
-
 # Palette
-BG_OUTER        = "#0a0f2e"
-BG_CARD         = "#111a4a"
-BG_HEADER_ROW   = "#0d1540"
-BG_ROW_ODD      = "#131e54"
-BG_ROW_EVEN     = "#0f1844"
-BG_CELL_EMPTY   = "#090d2a"
-BORDER_LIGHT    = "#3a4fa0"
-BORDER_GLOW     = "#5a7fd4"
-TEXT_WHITE      = "#ffffff"
-TEXT_YELLOW     = "#ffe040"
-TEXT_DIM        = "#6a7fc0"
-TEXT_ORANGE     = "#ff8c00"
+BG_OUTER        = (0.039, 0.059, 0.180, 1)   # #0a0f2e
+BG_CARD         = (0.067, 0.102, 0.290, 1)   # #111a4a
+BG_HEADER_ROW   = (0.051, 0.082, 0.251, 1)   # #0d1540
+BG_ROW_ODD      = (0.075, 0.118, 0.329, 1)   # #131e54
+BG_ROW_EVEN     = (0.059, 0.094, 0.282, 1)   # #0f1844
+BG_CELL_EMPTY   = (0.035, 0.051, 0.165, 1)   # #090d2a
+BORDER_LIGHT    = (0.227, 0.310, 0.627, 1)   # #3a4fa0
+BORDER_GLOW     = (0.353, 0.498, 0.831, 1)   # #5a7fd4
+TEXT_WHITE      = (1, 1, 1, 1)
+TEXT_YELLOW     = (1, 0.878, 0.251, 1)        # #ffe040
+TEXT_DIM        = (0.416, 0.498, 0.753, 1)   # #6a7fc0
+TEXT_ORANGE     = (1, 0.549, 0, 1)            # #ff8c00
 
-# Tier styling
-TIER_COLORS: Dict[str, str] = {
-    "none":       TEXT_DIM,
-    "3rd_place":  "#221100",
-    "2nd_place":  "#4B4B4B",
-    "1st_place":  "#645000",
-    "1_star":     "#645000",
-    "2_star":     "#645000",
-    "3_star":     "#645000",
+def _hex4(h: str) -> Tuple[float, float, float, float]:
+    h = h.lstrip("#")
+    r, g, b = int(h[0:2],16)/255, int(h[2:4],16)/255, int(h[4:6],16)/255
+    return (r, g, b, 1)
+
+# Tier colours
+TIER_BG: Dict[str, Tuple] = {
+    "none":      BG_CELL_EMPTY,
+    "3rd_place": _hex4("#cd7f32"),
+    "2nd_place": _hex4("#c0c0c0"),
+    "1st_place": _hex4("#deb900"),
+    "1_star":    _hex4("#deb900"),
+    "2_star":    _hex4("#deb900"),
+    "3_star":    _hex4("#deb900"),
 }
 
-TIER_BG: Dict[str, str] = {
-    "none":       BG_CELL_EMPTY,
-    "3rd_place":  "#cd7f32",
-    "2nd_place":  "#c0c0c0",
-    "1st_place":  "#deb900",
-    "1_star":     "#deb900",
-    "2_star":     "#deb900",
-    "3_star":     "#deb900",
+TIER_FG: Dict[str, Tuple] = {
+    "none":      TEXT_DIM,
+    "3rd_place": _hex4("#221100"),
+    "2nd_place": _hex4("#4B4B4B"),
+    "1st_place": _hex4("#645000"),
+    "1_star":    _hex4("#645000"),
+    "2_star":    _hex4("#645000"),
+    "3_star":    _hex4("#645000"),
 }
 
 TIER_SYMBOLS: Dict[str, str] = {
-    "none":       "",
-    "3rd_place":  "🏆",
-    "2nd_place":  "🏆",
-    "1st_place":  "🏆",
-    "1_star":     "★",
-    "2_star":     "★★",
-    "3_star":     "★★★",
+    "none":      "",
+    "3rd_place": "🏆",
+    "2nd_place": "🏆",
+    "1st_place": "🏆",
+    "1_star":    "★",
+    "2_star":    "★★",
+    "3_star":    "★★★",
 }
 
-# Cup display names with emoji shorthand
 CUP_ICONS: Dict[str, str] = {
-    "Mushroom Cup": "🍄",
-    "Flower Cup":   "🌻",
-    "Star Cup":     "⭐",
-    "Special Cup":  "👑",
-    "Shell Cup":    "🐢",
-    "Banana Cup":   "🍌",
-    "Leaf Cup":     "🍂",
-    "Lightning Cup":"⚡",
+    "Mushroom Cup":  "🍄",
+    "Flower Cup":    "🌻",
+    "Star Cup":      "⭐",
+    "Special Cup":   "👑",
+    "Shell Cup":     "🐢",
+    "Banana Cup":    "🍌",
+    "Leaf Cup":      "🍂",
+    "Lightning Cup": "⚡",
 }
 
 CUPS = list(CUP_ICONS.keys())
 CCS  = ["50cc", "100cc", "150cc", "Mirror"]
 
+CELL_SIZE = 68   # px
 
-def _hex_to_rgb(hex_color: str) -> Tuple[int, int, int]:
-    h = hex_color.lstrip("#")
-    return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+# Kivy imports  (deferred so the module can be imported without a display)
+def _import_kivy():
+    """Import Kivy lazily to avoid polluting the import namespace."""
+    import kivy
+    kivy.require("2.0.0")
 
+    from kivy.app             import App
+    from kivy.clock           import Clock
+    from kivy.core.image      import Image as CoreImage
+    from kivy.graphics        import Color, Rectangle, Line
+    from kivy.uix.boxlayout   import BoxLayout
+    from kivy.uix.floatlayout import FloatLayout
+    from kivy.uix.gridlayout  import GridLayout
+    from kivy.uix.image       import Image as KvImage
+    from kivy.uix.label       import Label
+    from kivy.uix.widget      import Widget
+    from kivy.config          import Config
 
-def _blend(c1: str, c2: str, t: float) -> str:
-    r1, g1, b1 = _hex_to_rgb(c1)
-    r2, g2, b2 = _hex_to_rgb(c2)
-    r = int(r1 + (r2 - r1) * t)
-    g = int(g1 + (g2 - g1) * t)
-    b = int(b1 + (b2 - b1) * t)
-    return f"#{r:02x}{g:02x}{b:02x}"
-
-
-def _load_image(path: Path, size: Tuple[int, int]) -> Optional["ImageTk.PhotoImage"]:
-    """Load and resize an image for tkinter. Returns None if unavailable."""
-    if not PIL_AVAILABLE or not path.exists():
-        return None
-    try:
-        img = Image.open(path).convert("RGBA").resize(size, Image.LANCZOS)
-        return ImageTk.PhotoImage(img)
-    except Exception:
-        return None
+    return (App, Clock, CoreImage, Color, Rectangle, Line,
+            BoxLayout, FloatLayout, GridLayout, KvImage, Label, Widget, Config)
 
 
-class LicenseCell(tk.Frame):
-    """A single cell in the cup grid, styled like an MKW license trophy slot."""
+# Helper: coloured bordered box
+def _make_bordered_box(parent_canvas, x, y, w, h, bg, border):
+    """Draw a filled rectangle with a 1-px border onto parent_canvas."""
+    from kivy.graphics import Color, Rectangle, Line
+    with parent_canvas:
+        Color(*bg)
+        Rectangle(pos=(x, y), size=(w, h))
+        Color(*border)
+        Line(rectangle=(x, y, w, h), width=1)
 
-    def __init__(self, parent: tk.Widget, **kwargs) -> None:
-        super().__init__(
-            parent,
-            bg=BG_CELL_EMPTY,
-            highlightbackground=BORDER_LIGHT,
-            highlightthickness=1,
-            width=68,
-            height=68,
-            **kwargs,
-        )
-        self.pack_propagate(False)
-        self.label = tk.Label(
-            self,
+
+# LicenseCell widget
+class LicenseCellWidget:
+    """
+    A single 68×68 cell in the cup grid.
+    Wraps a Kivy FloatLayout so we can layer a background + a centred label.
+    """
+
+    def __init__(self, Grid, row_hint, col_hint):
+        from kivy.uix.floatlayout import FloatLayout
+        from kivy.uix.label       import Label
+        from kivy.graphics        import Color, Rectangle, Line
+
+        self._Color     = Color
+        self._Rectangle = Rectangle
+        self._Line      = Line
+
+        self.widget = FloatLayout(size_hint=(None, None),
+                                  size=(CELL_SIZE, CELL_SIZE))
+
+        # Background canvas instruction references so we can update them
+        with self.widget.canvas.before:
+            self._bg_color  = Color(*BG_CELL_EMPTY)
+            self._bg_rect   = Rectangle(size=(CELL_SIZE, CELL_SIZE))
+            self._bdr_color = Color(*BORDER_LIGHT)
+            self._bdr_line  = Line(rectangle=(0, 0, CELL_SIZE, CELL_SIZE), width=1)
+
+        self._label = Label(
             text="",
-            bg=BG_CELL_EMPTY,
-            fg=TEXT_DIM,
-            font=("Segoe UI Emoji", 11),
-            anchor="center",
+            color=list(TEXT_DIM),
+            font_size="11sp",
+            halign="center",
+            valign="middle",
+            size_hint=(1, 1),
+            pos_hint={"center_x": 0.5, "center_y": 0.5},
         )
-        self.label.place(relx=0.5, rely=0.5, anchor="center")
+        self.widget.add_widget(self._label)
+
+        # Keep canvas in sync with widget position
+        self.widget.bind(pos=self._update_canvas, size=self._update_canvas)
+
+    def _update_canvas(self, instance, _value):
+        x, y = instance.pos
+        w, h = instance.size
+        self._bg_rect.pos  = (x, y)
+        self._bg_rect.size = (w, h)
+        self._bdr_line.rectangle = (x, y, w, h)
 
     def set_tier(self, tier: str) -> None:
-        bg   = TIER_BG.get(tier, BG_CELL_EMPTY)
-        fg   = TIER_COLORS.get(tier, TEXT_DIM)
-        sym  = TIER_SYMBOLS.get(tier, "–")
-        self.config(bg=bg, highlightbackground=BORDER_GLOW if tier != "none" else BORDER_LIGHT)
-        self.label.config(text=sym, bg=bg, fg=fg)
+        bg  = TIER_BG.get(tier, BG_CELL_EMPTY)
+        fg  = TIER_FG.get(tier, TEXT_DIM)
+        sym = TIER_SYMBOLS.get(tier, "")
+
+        self._bg_color.rgba  = list(bg)
+        self._bdr_color.rgba = list(BORDER_GLOW if tier != "none" else BORDER_LIGHT)
+        self._label.text     = sym
+        self._label.color    = list(fg)
 
 
-class LocationTrackerWindow:
-    """Tkinter window styled like the Mario Kart Wii license screen."""
+# Main tracker App
+class _TrackerApp:
+    """Encapsulates the Kivy App subclass so it can hold a ctx reference."""
 
-    def __init__(self, ctx: "MKWiiContext") -> None:
-        self.ctx  = ctx
-        self.root: Optional[tk.Tk] = None
-        self.cells: Dict[Tuple[str, str], LicenseCell] = {}
-        self.status_dot:  Optional[tk.Label] = None
-        self.status_text: Optional[tk.Label] = None
-        self.running: bool = False
-        # Keep references so tkinter doesn't GC the images
-        self._img_mkwii: Optional["ImageTk.PhotoImage"] = None
-        self._img_ap:    Optional["ImageTk.PhotoImage"] = None
+    def __init__(self, ctx: "MKWiiContext"):
+        self.ctx   = ctx
+        self.cells: Dict[Tuple[str, str], "LicenseCellWidget"] = {}
+        self._status_dot:  Optional[object] = None
+        self._status_text: Optional[object] = None
+        self._app:         Optional[object] = None
 
-    # Public API
-    def start(self) -> None:
-        if self.running:
-            return
-        self.running = True
-        thread = threading.Thread(target=self._run_window, daemon=True)
-        thread.start()
+    def run(self) -> None:
+        """Build and run the Kivy App (blocking — call from a thread)."""
+        (App, Clock, CoreImage, Color, Rectangle, Line,
+         BoxLayout, FloatLayout, GridLayout, KvImage, Label, Widget, Config) = _import_kivy()
 
-    # Window construction
-    def _run_window(self) -> None:
-        self.root = tk.Tk()
-        self.root.title("MKWii AP Tracker")
-        self.root.configure(bg=BG_OUTER)
-        self.root.resizable(False, False)
+        Config.set("graphics", "width",      str(CELL_SIZE * (len(CUPS) + 1) + 40))
+        Config.set("graphics", "height",     str(CELL_SIZE * (len(CCS)  + 1) + 140))
+        Config.set("graphics", "resizable",  "0")
+        Config.set("graphics", "borderless", "0")
+        Config.set("kivy",     "window_icon", "")
 
-        self._build_ui()
-        self._schedule_update()
+        ctx = self.ctx
 
-        try:
-            self.root.mainloop()
-        except Exception:
-            pass
-        finally:
-            self.running = False
+        # build the UI
+        outer = BoxLayout(orientation="vertical",
+                          padding=12, spacing=8)
+        outer.canvas.before.add(Color(*BG_OUTER))
+        _bg = Rectangle(size=outer.size, pos=outer.pos)
+        outer.canvas.before.add(_bg)
+        outer.bind(size=lambda i,v: setattr(_bg, "size", v),
+                   pos =lambda i,v: setattr(_bg, "pos",  v))
 
-    def _build_ui(self) -> None:
-        root = self.root
+        # TOP BAR
+        top_bar = BoxLayout(orientation="horizontal",
+                            size_hint_y=None, height=84,
+                            padding=6, spacing=8)
+        _paint_bg(top_bar, BG_CARD, BORDER_GLOW)
 
-        # Pre-load images
-        self._img_mkwii = _load_image(IMG_MKWII, (72, 72))
-        self._img_ap    = _load_image(IMG_AP,    (56, 56))
-
-        # Outer padding frame
-        outer = tk.Frame(root, bg=BG_OUTER, padx=12, pady=10)
-        outer.pack(fill="both", expand=True)
-
-        # Top bar
-        top_bar = tk.Frame(outer, bg=BG_CARD,
-                           highlightbackground=BORDER_GLOW, highlightthickness=2)
-        top_bar.pack(fill="x", pady=(0, 8))
-
-        # MKWii banner image
-        if self._img_mkwii:
-            banner = tk.Label(top_bar, image=self._img_mkwii, bg=BG_CARD, borderwidth=0)
+        # MKWii banner image (or fallback label)
+        if IMG_MKWII.exists():
+            try:
+                banner = KvImage(source=str(IMG_MKWII),
+                                 size_hint=(None, None), size=(72, 72),
+                                 allow_stretch=True, keep_ratio=True)
+            except Exception:
+                banner = _make_label("MKWii", BG_CARD, TEXT_YELLOW, bold=True,
+                                     size_hint=(None, 1), width=72)
         else:
-            # Fallback: plain dark box if image not found
-            banner = tk.Label(top_bar, text="MKWii", bg="#1a2050",
-                              fg=TEXT_YELLOW, font=("Trebuchet MS", 10, "bold"),
-                              width=8, height=4)
-        banner.pack(side="left", padx=(6, 8), pady=6)
+            banner = _make_label("MKWii", BG_CARD, TEXT_YELLOW, bold=True,
+                                 size_hint=(None, 1), width=72)
+        top_bar.add_widget(banner)
 
-        # Title + connection status
-        info_frame = tk.Frame(top_bar, bg=BG_CARD)
-        info_frame.pack(side="left", fill="both", expand=True, padx=0, pady=6)
+        # Title + status
+        info_col = BoxLayout(orientation="vertical", spacing=4)
+        _paint_bg(info_col, BG_CARD)
 
-        tk.Label(
-            info_frame,
+        title_lbl = Label(
             text="Mario Kart Wii  •  AP Tracker",
-            bg=BG_CARD, fg=TEXT_YELLOW,
-            font=("Trebuchet MS", 13, "bold"),
-            anchor="w",
-        ).pack(anchor="w")
+            color=list(TEXT_YELLOW),
+            font_size="13sp",
+            bold=True,
+            halign="left",
+            valign="bottom",
+            size_hint_y=0.55,
+        )
+        title_lbl.bind(size=title_lbl.setter("text_size"))
+        info_col.add_widget(title_lbl)
 
-        status_row = tk.Frame(info_frame, bg=BG_CARD)
-        status_row.pack(anchor="w", pady=(2, 0))
+        status_row = BoxLayout(orientation="horizontal", spacing=3,
+                               size_hint_y=0.45)
+        _paint_bg(status_row, BG_CARD)
 
-        self.status_dot = tk.Label(status_row, text="●", bg=BG_CARD, fg="#ff6600",
-                                   font=("Arial", 10))
-        self.status_dot.pack(side="left")
+        self._status_dot = Label(
+            text="●", color=list(TEXT_ORANGE),
+            font_size="10sp",
+            size_hint=(None, 1), width=14,
+        )
+        self._status_text = Label(
+            text="Waiting for Dolphin…",
+            color=list(TEXT_DIM),
+            font_size="9sp",
+            halign="left", valign="middle",
+        )
+        self._status_text.bind(size=self._status_text.setter("text_size"))
+        status_row.add_widget(self._status_dot)
+        status_row.add_widget(self._status_text)
+        info_col.add_widget(status_row)
+        top_bar.add_widget(info_col)
 
-        self.status_text = tk.Label(status_row, text="Waiting for Dolphin…",
-                                    bg=BG_CARD, fg=TEXT_DIM, font=("Trebuchet MS", 9))
-        self.status_text.pack(side="left", padx=(3, 0))
-
-        # Archipelago logo
-        if self._img_ap:
-            ap_widget = tk.Label(top_bar, image=self._img_ap, bg=BG_CARD, borderwidth=0)
-            ap_widget.pack(side="right", padx=10, pady=6)
+        # AP logo (or fallback)
+        if IMG_AP.exists():
+            try:
+                ap_img = KvImage(source=str(IMG_AP),
+                                 size_hint=(None, None), size=(56, 56),
+                                 allow_stretch=True, keep_ratio=True)
+                top_bar.add_widget(ap_img)
+            except Exception:
+                top_bar.add_widget(_ap_fallback(Label))
         else:
-            # Fallback placeholder frame — shown until archipelago_logo.png is in Img/
-            ap_fallback = tk.Frame(top_bar, bg="#1e3a8a", width=54, height=34,
-                                   highlightbackground=BORDER_GLOW, highlightthickness=1)
-            ap_fallback.pack(side="right", padx=10, pady=6)
-            ap_fallback.pack_propagate(False)
-            tk.Label(ap_fallback, text="AP", bg="#1e3a8a", fg=TEXT_YELLOW,
-                     font=("Trebuchet MS", 13, "bold")).place(relx=0.5, rely=0.5, anchor="center")
+            top_bar.add_widget(_ap_fallback(Label))
 
-        # License grid
-        grid_outer = tk.Frame(outer, bg=BG_CARD,
-                              highlightbackground=BORDER_GLOW, highlightthickness=2)
-        grid_outer.pack(fill="both", expand=True)
+        outer.add_widget(top_bar)
 
-        grid_frame = tk.Frame(grid_outer, bg=BG_CARD, padx=6, pady=6)
-        grid_frame.pack(fill="both", expand=True)
+        # GRID
+        grid_outer = BoxLayout(orientation="vertical", padding=6, spacing=0)
+        _paint_bg(grid_outer, BG_CARD, BORDER_GLOW)
 
-        CELL_W   = 68
-        CELL_H   = 68
-        CC_COL_W = 68
+        cols = len(CUPS) + 1
+        grid = GridLayout(cols=cols,
+                          spacing=2, padding=0,
+                          size_hint_y=None)
+        grid.bind(minimum_height=grid.setter("height"))
 
-
-        # Corner spacer
-        corner = tk.Frame(grid_frame, bg=BG_OUTER, width=CC_COL_W, height=CELL_H,
-                          highlightbackground=BORDER_LIGHT, highlightthickness=1)
-        corner.grid(row=0, column=0, padx=1, pady=1, sticky="nsew")
-        corner.pack_propagate(False)
-        tk.Label(corner, text="Tracker", bg=BG_OUTER, fg=TEXT_DIM,
-                 font=("Trebuchet MS", 9), anchor="center").place(relx=0.5, rely=0.5, anchor="center")
+        # Corner cell
+        corner = _header_cell("Tracker", BG_OUTER, TEXT_DIM, font_size="9sp")
+        grid.add_widget(corner)
 
         # Cup column headers
-        for col, cup in enumerate(CUPS):
+        for cup in CUPS:
             icon  = CUP_ICONS[cup]
             short = cup.replace(" Cup", "")
-            hdr = tk.Frame(grid_frame, bg=BG_HEADER_ROW, width=CELL_W, height=CELL_H,
-                           highlightbackground=BORDER_LIGHT, highlightthickness=1)
-            hdr.grid(row=0, column=col + 1, padx=1, pady=1, sticky="nsew")
-            hdr.pack_propagate(False)
-            tk.Label(hdr, text=icon, bg=BG_HEADER_ROW, fg=TEXT_WHITE,
-                     font=("Segoe UI Emoji", 18), anchor="center").place(relx=0.5, rely=0.35, anchor="center")
-            tk.Label(hdr, text=short, bg=BG_HEADER_ROW, fg=TEXT_DIM,
-                     font=("Trebuchet MS", 7), anchor="center").place(relx=0.5, rely=0.82, anchor="center")
+            hdr   = FloatLayout(size_hint=(None, None), size=(CELL_SIZE, CELL_SIZE))
+            _paint_bg(hdr, BG_HEADER_ROW, BORDER_LIGHT)
+            hdr.add_widget(Label(text=icon, font_size="18sp",
+                                 color=list(TEXT_WHITE),
+                                 pos_hint={"center_x": 0.5, "center_y": 0.65},
+                                 size_hint=(1, None), height=CELL_SIZE))
+            hdr.add_widget(Label(text=short, font_size="7sp",
+                                 color=list(TEXT_DIM),
+                                 pos_hint={"center_x": 0.5, "center_y": 0.18},
+                                 size_hint=(1, None), height=CELL_SIZE))
+            grid.add_widget(hdr)
 
-        # CC rows
-        for row, cc in enumerate(CCS):
-            bg_row = BG_ROW_ODD if row % 2 == 0 else BG_ROW_EVEN
+        # CC rows + data cells
+        for row_idx, cc in enumerate(CCS):
+            bg_row = BG_ROW_ODD if row_idx % 2 == 0 else BG_ROW_EVEN
 
-            cc_cell = tk.Frame(grid_frame, bg=bg_row, width=CC_COL_W, height=CELL_H,
-                               highlightbackground=BORDER_LIGHT, highlightthickness=1)
-            cc_cell.grid(row=row + 1, column=0, padx=1, pady=1, sticky="nsew")
-            cc_cell.pack_propagate(False)
-            tk.Label(cc_cell, text=cc, bg=bg_row, fg=TEXT_WHITE,
-                     font=("Trebuchet MS", 9, "bold"), anchor="center"
-                     ).place(relx=0.5, rely=0.5, anchor="center")
+            cc_cell = _header_cell(cc, bg_row, TEXT_WHITE,
+                                   font_size="9sp", bold=True)
+            grid.add_widget(cc_cell)
 
-            for col, cup in enumerate(CUPS):
-                cell = LicenseCell(grid_frame)
-                cell.grid(row=row + 1, column=col + 1, padx=1, pady=1, sticky="nsew")
+            for cup in CUPS:
+                cell = LicenseCellWidget(grid, row_idx, CUPS.index(cup))
                 self.cells[(cup, cc)] = cell
+                grid.add_widget(cell.widget)
 
-        # Resize to fit
-        self.root.update_idletasks()
-        self.root.minsize(self.root.winfo_reqwidth(), self.root.winfo_reqheight())
+        grid_outer.add_widget(grid)
+        outer.add_widget(grid_outer)
 
-    # Live update loop
-    def _schedule_update(self) -> None:
-        if not self.root or not self.running:
-            return
+        # Kivy App subclass
+        tracker_self = self
+
+        class TrackerApp(App):
+            def build(self_app):
+                self_app.title = "MKWii AP Tracker"
+                return outer
+
+            def on_start(self_app):
+                Clock.schedule_interval(tracker_self._tick, 0.5)
+
+        self._app = TrackerApp()
+        self._app.run()
+
+    def _tick(self, dt) -> None:
+        """Called by Kivy Clock every 0.5 s — update connection status & cells."""
         try:
-            connected = getattr(self.ctx, "dolphin", None) and self.ctx.dolphin.is_connected
+            connected = (getattr(self.ctx, "dolphin", None) and
+                         self.ctx.dolphin.is_connected)
 
-            if self.status_dot and self.status_text:
+            if self._status_dot and self._status_text:
                 if connected:
-                    self.status_dot.config(fg="#00e060")
-                    self.status_text.config(text="Connected to Dolphin", fg="#80ffb0")
+                    self._status_dot.color  = [0, 0.878, 0.376, 1]   # #00e060
+                    self._status_text.text  = "Connected to Dolphin"
+                    self._status_text.color = [0.502, 1, 0.690, 1]   # #80ffb0
                 else:
-                    self.status_dot.config(fg=TEXT_ORANGE)
-                    self.status_text.config(text="Waiting for Dolphin…", fg=TEXT_DIM)
+                    self._status_dot.color  = list(TEXT_ORANGE)
+                    self._status_text.text  = "Waiting for Dolphin…"
+                    self._status_text.color = list(TEXT_DIM)
 
             completed = getattr(self.ctx, "completed_locations", {})
             for (cup, cc), cell in self.cells.items():
                 tier = completed.get((cup, cc), "none")
                 cell.set_tier(tier)
-
-            self.root.after(500, self._schedule_update)
         except Exception:
             pass
+
+
+# Small helpers
+def _paint_bg(widget, bg, border=None):
+    """Attach a background (and optional border) to any widget's canvas.before."""
+    from kivy.graphics import Color, Rectangle, Line
+    with widget.canvas.before:
+        Color(*bg)
+        rect = Rectangle(size=widget.size, pos=widget.pos)
+        widget.bind(size=lambda i,v: setattr(rect,"size",v),
+                    pos =lambda i,v: setattr(rect,"pos", v))
+        if border:
+            Color(*border)
+            line = Line(rectangle=(widget.x, widget.y,
+                                   widget.width, widget.height), width=1)
+            widget.bind(
+                size=lambda i,v,l=line,w=widget: setattr(
+                    l, "rectangle", (w.x, w.y, v[0], v[1])),
+                pos =lambda i,v,l=line,w=widget: setattr(
+                    l, "rectangle", (v[0], v[1], w.width, w.height)),
+            )
+
+
+def _make_label(text, bg, fg, bold=False, **kwargs):
+    from kivy.uix.label import Label
+    lbl = Label(text=text, color=list(fg), bold=bold,
+                halign="center", valign="middle", **kwargs)
+    _paint_bg(lbl, bg)
+    return lbl
+
+
+def _header_cell(text, bg, fg, font_size="9sp", bold=False):
+    from kivy.uix.floatlayout import FloatLayout
+    from kivy.uix.label       import Label
+    cell = FloatLayout(size_hint=(None, None), size=(CELL_SIZE, CELL_SIZE))
+    _paint_bg(cell, bg, BORDER_LIGHT)
+    lbl = Label(text=text, color=list(fg),
+                font_size=font_size, bold=bold,
+                halign="center", valign="middle",
+                pos_hint={"center_x": 0.5, "center_y": 0.5},
+                size_hint=(1, 1))
+    lbl.bind(size=lbl.setter("text_size"))
+    cell.add_widget(lbl)
+    return cell
+
+
+def _ap_fallback(Label):
+    from kivy.uix.floatlayout import FloatLayout
+    box = FloatLayout(size_hint=(None, None), size=(54, 34))
+    _paint_bg(box, (0.118, 0.227, 0.541, 1), BORDER_GLOW)   # #1e3a8a
+    box.add_widget(Label(text="AP", color=list(TEXT_YELLOW),
+                         font_size="13sp", bold=True,
+                         pos_hint={"center_x": 0.5, "center_y": 0.5},
+                         size_hint=(1, 1)))
+    return box
+
+
+# Public API
+class LocationTrackerWindow:
+    """Drop-in replacement for the original tkinter LocationTrackerWindow."""
+
+    def __init__(self, ctx: "MKWiiContext") -> None:
+        self.ctx     = ctx
+        self.running = False
+        self._app    = _TrackerApp(ctx)
+
+    def start(self) -> None:
+        if self.running:
+            return
+        self.running = True
+        t = threading.Thread(target=self._run, daemon=True)
+        t.start()
+
+    def _run(self) -> None:
+        try:
+            self._app.run()
+        except Exception:
+            pass
+        finally:
+            self.running = False
 
 
 _tracker_instance: Optional[LocationTrackerWindow] = None
