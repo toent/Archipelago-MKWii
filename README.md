@@ -8,7 +8,7 @@ presently, Archipelago is also the randomizer itself.
 * An **unmodified PAL** Mario Kart Wii ROM
 * [Dolphin 2512](https://dolphin-emu.org/download/release/2512/) (Dolphin 5 or higher is the minimum)
 * [Latest MKWii Client and APWorld Release](https://github.com/toent/Archipelago-MKWii/releases/latest)
-* [TKinter (LINUX ONLY)](https://www.geeksforgeeks.org/installation-guide/how-to-install-tkinter-on-linux/) (+ [Python 3.13.12](https://www.python.org/downloads/release/python-31312/) and [Git](https://git-scm.com/install/) are needed)
+* LINUX ONLY [Python 3.13.12](https://www.python.org/downloads/release/python-31312/) and [Git](https://git-scm.com/install/) are needed
 
 ### Getting Set up:
 1. Install the requirements marked above according to their installers.
