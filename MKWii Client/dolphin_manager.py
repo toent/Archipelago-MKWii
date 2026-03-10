@@ -361,6 +361,20 @@ class DolphinManager:
             _report_handler(f"ERROR: Failed to replace save with empty: {e}", self)
             return False
 
+    def show_tracker_auto_launch_selection(self) -> bool:
+        """Ask user if the AP tracker should auto-launch when connected. Returns True if yes."""
+        print("\n  AP Tracker Auto-Launch")
+        print("  " + "-" * 40)
+        print("  Would you like the AP tracker window to automatically open when")
+        print("  you connect to the Archipelago server?")
+        print("  This can be changed later in the config file (tracker_auto_launch).")
+
+        response = input("\n  Enable tracker auto-launch? (y/n): ").strip().lower()
+        enable = response == "y"
+        self.config["tracker_auto_launch"] = enable
+        self._save_config()
+        return enable
+
     # Setup wizard
     def run_setup(self) -> dict:
         """Interactive first-run setup. Returns {"iso_path": str, "ready": bool}."""
