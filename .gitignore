@@ -207,3 +207,4 @@ mkwii_ap_config.json
 mkwii_client.spec
 report.log
 itemqueues/
+tracker_crash.log
