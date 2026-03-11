@@ -16,7 +16,8 @@ Vanilla unlock blocking strategy:
 Expected directory layout:
     Archipelago/
         CommonClient.py, NetUtils.py, ...
-        MKWii Client/
+
+        worlds/mkwii/MKWii Client/
             mkwii_client.py     (this file)
             dolphin_memory.py
             dolphin_manager.py

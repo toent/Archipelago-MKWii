@@ -16,6 +16,9 @@ import Utils
 from typing import Optional
 from reporting import report_handler as _report_handler
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../.."))
+import Utils
+
 logger = logging.getLogger("MKWii.Dolphin")
 
 GAME_ID = "RMCP01"
