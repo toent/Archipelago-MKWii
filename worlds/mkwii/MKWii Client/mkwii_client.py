@@ -16,7 +16,6 @@ Vanilla unlock blocking strategy:
 Expected directory layout:
     Archipelago/
         CommonClient.py, NetUtils.py, ...
-
         worlds/mkwii/MKWii Client/
             mkwii_client.py     (this file)
             dolphin_memory.py
@@ -673,10 +672,10 @@ class MKWiiContext(CommonContext):
         if self.goal_reached or not self.slot_data:
             return
 
-        required  = self.slot_data.get("cups_required_for_goal", 6)
-        goal_cc   = CC_NAMES[self.slot_data.get("goal_cc", 2)]
-        goal_tier = TIER_HIERARCHY[min(self.slot_data.get("goal_difficulty", 3), len(TIER_HIERARCHY) - 1)]
-        goal_idx  = TIER_HIERARCHY.index(goal_tier)
+        required   = self.slot_data.get("cups_required_for_goal", 6)
+        goal_cc    = CC_NAMES[self.slot_data.get("goal_cc", 2)]
+        goal_tier  = TIER_HIERARCHY[min(self.slot_data.get("goal_difficulty", 3), len(TIER_HIERARCHY) - 1)]
+        goal_idx   = TIER_HIERARCHY.index(goal_tier)
 
         count = 0
         for cup in CUPS:
@@ -707,6 +706,7 @@ class MKWiiContext(CommonContext):
             logger.info(f"GOAL COMPLETE: {count}/{required} cups at "
                         f"{goal_tier.replace('_', ' ')}+ on {goal_cc}")
             await self.send_msgs([{"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}])
+
 
 # Entry point
 
