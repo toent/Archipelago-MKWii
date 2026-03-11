@@ -16,7 +16,7 @@ Vanilla unlock blocking strategy:
 Expected directory layout:
     Archipelago/
         CommonClient.py, NetUtils.py, ...
-        MKWii Client/
+        worlds/mkwii/MKWii Client/
             mkwii_client.py     (this file)
             dolphin_memory.py
             dolphin_manager.py
@@ -680,22 +680,26 @@ class MKWiiContext(CommonContext):
         count = 0
         for cup in CUPS:
             achieved = self.completed_locations.get((cup, goal_cc), "none")
-            if achieved in TIER_HIERARCHY:
-                achieved_idx = TIER_HIERARCHY.index(achieved)
+            achieved_idx = TIER_HIERARCHY.index(achieved) if achieved in TIER_HIERARCHY else -1
 
-                if achieved_idx >= goal_idx:
-                    valid_progression = True
-                    for lower_idx in range(achieved_idx):
-                        lower_tier = TIER_HIERARCHY[lower_idx]
-                        if self.completed_locations.get((cup, goal_cc)) != lower_tier and \
-                        TIER_HIERARCHY.index(
-                            self.completed_locations.get((cup, goal_cc), "none")
-                        ) < lower_idx:
-                            valid_progression = False
-                            break
+            if achieved_idx < goal_idx:
+                continue
 
-                    if valid_progression:
-                        count += 1
+            # All tiers below goal_tier must also be present in checked_locations
+            valid_progression = True
+            for lower_idx in range(goal_idx):
+                lower_tier = TIER_HIERARCHY[lower_idx]
+                if lower_tier.__contains__("star"):
+                    loc_name = f"{cup} {goal_cc} - {lower_tier.replace('_', ' ').title()}"
+                else:
+                    loc_name = f"{cup} {goal_cc} - {lower_tier.replace('_', ' ')}"
+                loc_id = self.location_name_to_id.get(loc_name)
+                if not loc_id or loc_id not in self.checked_locations:
+                    valid_progression = False
+                    break
+
+            if valid_progression:
+                count += 1
 
         if count >= required:
             self.goal_reached = True
@@ -715,6 +719,9 @@ async def main() -> None:
 
     if "dolphin_auto_launch" not in mgr.config:
         mgr.show_dolphin_auto_launch_selection()
+
+    if "tracker_auto_launch" not in mgr.config:
+        mgr.show_tracker_auto_launch_selection()
 
     iso_path = None
     if mgr.config.get("dolphin_auto_launch", True):
