@@ -15,6 +15,9 @@ import sys
 from typing import Optional
 from reporting import report_handler as _report_handler
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../.."))
+import Utils
+
 logger = logging.getLogger("MKWii.Dolphin")
 
 GAME_ID = "RMCP01"
@@ -98,20 +101,13 @@ class DolphinManager:
 
     def _pick_save_dialog(self) -> Optional[str]:
         try:
-            import tkinter as tk
-            from tkinter import filedialog
-
-            root = tk.Tk()
-            root.withdraw()
-            root.attributes("-topmost", True)
-            path = filedialog.askopenfilename(
+            path = Utils.open_filename(
                 title="Select Mario Kart Wii save file (rksys.dat)",
                 filetypes=[
                     ("MKWii save file", "rksys.dat"),
                     ("All files", "*.*"),
                 ],
             )
-            root.destroy()
             return path or ""
         except Exception as e:
             logger.error(f"File dialog failed: {e}")
@@ -134,20 +130,13 @@ class DolphinManager:
 
     def _pick_iso_dialog(self) -> Optional[str]:
         try:
-            import tkinter as tk
-            from tkinter import filedialog
-
-            root = tk.Tk()
-            root.withdraw()
-            root.attributes("-topmost", True)
-            path = filedialog.askopenfilename(
+            path = Utils.open_filename(
                 title="Select Mario Kart Wii PAL ISO",
                 filetypes=[
                     ("Wii disc images", "*.iso *.wbfs *.gcz *.rvz *.wia *.ciso"),
                     ("All files", "*.*"),
                 ],
             )
-            root.destroy()
             return path or ""
         except Exception as e:
             logger.error(f"File dialog failed: {e}")
@@ -187,17 +176,10 @@ class DolphinManager:
 
     def pick_dolphin_exe(self) -> Optional[str]:
         try:
-            import tkinter as tk
-            from tkinter import filedialog
-
-            root = tk.Tk()
-            root.withdraw()
-            root.attributes("-topmost", True)
-            path = filedialog.askopenfilename(
+            path = Utils.open_filename(
                 title="Select Dolphin.exe",
                 filetypes=[("Dolphin Emulator", "Dolphin.exe"), ("All executables", "*.exe")],
             )
-            root.destroy()
             if path and os.path.isfile(path):
                 self.config["dolphin_exe"] = path
                 self._save_config()

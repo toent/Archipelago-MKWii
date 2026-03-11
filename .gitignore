@@ -204,3 +204,4 @@ mkwii_client.spec
 report.log
 itemqueues/
 tracker_crash.log
+crash.log
