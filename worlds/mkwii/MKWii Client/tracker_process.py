@@ -1,5 +1,5 @@
 """
-tracker_process.py — standalone tracker subprocess.
+tracker_process.py - standalone tracker subprocess.
 
 Usage:
     python tracker_process.py <server_address> <slot_name> [password]
@@ -20,18 +20,19 @@ AP_SERVER  = sys.argv[1] if len(sys.argv) > 1 else ""
 AP_SLOT    = sys.argv[2] if len(sys.argv) > 2 else ""
 AP_PASS    = sys.argv[3] if len(sys.argv) > 3 else ""
 
-# If credentials were not supplied via args, the Kivy UI will show a login
-# screen and populate these globals before starting the AP thread.
+# If credentials were not supplied via args, the Kivy UI will show a login screen and populate these globals before starting the AP thread.
 _STANDALONE_MODE = AP_SERVER == "" or AP_SLOT == ""
 
 if getattr(sys, "frozen", False):
-    _HERE = Path(sys.executable).parent
+    # Bundled assets live in _MEIPASS (PyInstaller's temp extract dir), not beside the exe. Log file stays beside the exe.
+    _HERE = Path(sys._MEIPASS)
+    _LOG_DIR = Path(sys.executable).parent
 else:
     _HERE = Path(__file__).parent
+    _LOG_DIR = _HERE
 
-# Write all uncaught exceptions to a log file beside this script,
-# because subprocess stdout/stderr may not be visible to the user.
-_LOG = _HERE / "tracker_crash.log"
+# Write all uncaught exceptions to a log file beside this script, because subprocess stdout/stderr may not be visible to the user.
+_LOG = _LOG_DIR / "tracker_crash.log"
 
 def _excepthook(exc_type, exc_value, exc_tb):
     import traceback
@@ -49,7 +50,7 @@ sys.path.insert(0, str(_HERE.parent))
 def _ap_version() -> dict:
     """Return the Archipelago version dict, falling back to the client's own version."""
     try:
-        from Utils import version_tuple  # Archipelago Utils
+        from Utils import version_tuple
         major, minor, build = version_tuple
         return {"major": major, "minor": minor, "build": build, "class": "Version"}
     except Exception:
@@ -57,7 +58,7 @@ def _ap_version() -> dict:
     # Fallback: parse from CommonClient if available
     try:
         import CommonClient
-        v = CommonClient.ClientStatus  # noqa — just testing import
+        v = CommonClient.ClientStatus
         from Utils import __version__
         parts = [int(x) for x in __version__.split(".")[:3]]
         return {"major": parts[0], "minor": parts[1], "build": parts[2], "class": "Version"}
@@ -115,7 +116,7 @@ TIER_SYMBOLS = {
     "3_star":    "⭐⭐⭐",
 }
 
-# Cup icon spritesheet — sliced with Pillow at startup into temp PNG files,
+# Cup icon spritesheet - sliced with Pillow at startup into temp PNG files,
 # then loaded as normal KvImage source paths.
 _CUP_SPRITESHEET = _HERE / "img" / "cup_icons.png"
 _CUP_GRID_POS = {
@@ -229,7 +230,7 @@ POWERUP_ITEMS = [
     "Powerup: Banana",
 ]
 
-# Item icon spritesheet — 11 cols x 2 rows, black background
+# Item icon spritesheet - 11 cols x 2 rows, black background
 _ITEM_SPRITESHEET = _HERE / "img" / "item_icons.png"
 _ITEM_GRID_COLS = 9
 _ITEM_GRID_POS = {
@@ -252,6 +253,7 @@ _ITEM_GRID_POS = {
     "Powerup: Mushroom":             (7, 1),
     "Powerup: Triple Mushrooms":     (8, 1),
 }
+
 # Maps item name -> temp PNG path; populated by _slice_item_icons()
 ITEM_ICON_PATHS: dict[str, str] = {}
 
@@ -315,10 +317,8 @@ for _t in TIER_HIERARCHY:
     TIER_NORMALIZE[_readable.title()] = _t
     TIER_NORMALIZE[_readable.lower()] = _t
 
-# ---------------------------------------------------------------------------
-# Shared state — written by the asyncio AP thread, read by Kivy tick
-# ---------------------------------------------------------------------------
 
+# Shared state - written by the asyncio AP thread, read by Kivy tick
 _state_lock = threading.Lock()
 _state = {
     "connected":              False,
@@ -347,9 +347,9 @@ def _read_state() -> dict:
         }
 
 
-# ---------------------------------------------------------------------------
+
 # AP websocket client (runs in a background thread)
-# ---------------------------------------------------------------------------
+
 
 def _ensure_ws_scheme(addr: str) -> str:
     if addr.startswith("ws://") or addr.startswith("wss://"):
@@ -404,7 +404,7 @@ async def _ap_client_loop() -> None:
     try:
         import websockets
     except ImportError:
-        print("[Tracker] websockets library not found — pip install websockets")
+        print("[Tracker] websockets library not found - pip install websockets")
         return
 
     # Try wss:// first (archipelago.gg and most hosted servers require it),
@@ -449,7 +449,7 @@ async def _ap_client_loop() -> None:
             print(f"[Tracker] Connecting to {uri} as '{AP_SLOT}'...")
             async with websockets.connect(uri, ping_interval=30) as ws:
 
-                # ── handshake ──────────────────────────────────────────────
+                #  handshake 
 
                 # 1. Receive RoomInfo
                 raw = await ws.recv()
@@ -504,7 +504,7 @@ async def _ap_client_loop() -> None:
                     await asyncio.sleep(10)
                     continue
 
-                # ── slot_data feature flags ────────────────────────────────
+                #  slot_data feature flags 
                 slot_data          = connected_msg.get("slot_data", {})
                 include_race       = bool(slot_data.get("include_race_checks", True))
                 enable_items       = bool(slot_data.get("enable_item_randomization", True))
@@ -537,7 +537,7 @@ async def _ap_client_loop() -> None:
                     if ap_name and ap_name not in starting_unlocked:
                         starting_unlocked.append(ap_name)
 
-                # ── initial state from checked_locations ───────────────────
+                #  initial state from checked_locations ─
                 checked_ids: list[int] = connected_msg.get("checked_locations", [])
                 completed: dict[str, str] = {}
                 track_locs: dict[str, bool] = {}
@@ -567,11 +567,11 @@ async def _ap_client_loop() -> None:
                     include_race_checks=include_race,
                     enable_item_randomization=enable_items,
                 )
-                print(f"[Tracker] Connected — {len(checked_ids)} checked locations, "
+                print(f"[Tracker] Connected - {len(checked_ids)} checked locations, "
                       f"race={include_race}, items={enable_items}, "
                       f"starting_unlocked={starting_unlocked}")
 
-                # ── main receive loop ──────────────────────────────────────
+                #  main receive loop 
                 async for raw in ws:
                     msgs = json.loads(raw)
                     changed = False
@@ -629,9 +629,9 @@ def _run_ap_thread() -> None:
     loop.run_until_complete(_ap_thread_main())
 
 
-# ---------------------------------------------------------------------------
+
 # Kivy UI  (identical visual structure to the original)
-# ---------------------------------------------------------------------------
+
 
 os.environ.setdefault("KIVY_NO_CONSOLELOG", "1")
 
@@ -876,7 +876,7 @@ class TrackerApp(App):
         root = BoxLayout(orientation="vertical", padding=[6, 6, 6, 6], spacing=4)
         _paint_bg(root, BG_OUTER)
 
-        # ── top bar ────────────────────────────────────────────────────────
+        #  top bar 
         top_bar = BoxLayout(orientation="horizontal",
                             size_hint=(1, None), height=84,
                             padding=[6, 6, 6, 6], spacing=8)
@@ -910,7 +910,7 @@ class TrackerApp(App):
 
         root.add_widget(top_bar)
 
-        # ── tab bar ────────────────────────────────────────────────────────
+        #  tab bar 
         tab_bar = BoxLayout(orientation="horizontal",
                             size_hint=(1, None), height=30, spacing=4)
         _paint_bg(tab_bar, BG_OUTER)
@@ -922,7 +922,7 @@ class TrackerApp(App):
         tab_bar.add_widget(BoxLayout(size_hint_x=1))
         root.add_widget(tab_bar)
 
-        # ── content ────────────────────────────────────────────────────────
+        #  content 
         self._content = BoxLayout(orientation="vertical", size_hint=(1, 1))
         _paint_bg(self._content, BG_OUTER)
         root.add_widget(self._content)
@@ -945,7 +945,7 @@ class TrackerApp(App):
         Clock.schedule_interval(self._tick, 0.5)
         return root
 
-    # ── login panel (standalone mode) ─────────────────────────────────────
+    #  login panel (standalone mode) 
 
     def _show_login_panel(self):
         from kivy.uix.textinput import TextInput
@@ -1014,9 +1014,9 @@ class TrackerApp(App):
         self._txt.text  = f"Connecting to {server}…"
         self._txt.color = list(TEXT_DIM)
 
-        # Stay on login panel — _tick will switch to Cups once connected
+        # Stay on login panel - _tick will switch to Cups once connected
 
-    # ── tab helpers ────────────────────────────────────────────────────────
+    #  tab helpers 
 
     def _make_tab_btn(self, label: str, active: bool, disabled: bool = False):
         btn = FloatLayout(size_hint=(None, None), size=(90, 30))
@@ -1030,7 +1030,7 @@ class TrackerApp(App):
             fg     = TEXT_YELLOW if active else TEXT_DIM
         _paint_bg(btn, bg, border)
         # Strikethrough-style suffix to make disabled state obvious
-        display = f"{label} ✕" if disabled else label
+        display = f"{label}" if disabled else label
         btn.add_widget(_label(display, fg,
                               font_size="9pt", bold=(active and not disabled),
                               pos_hint={"center_x": 0.5, "center_y": 0.5},
@@ -1064,7 +1064,7 @@ class TrackerApp(App):
             lbl.color = list(TEXT_YELLOW if active else TEXT_DIM)
             lbl.bold  = active
 
-    # ── Cups panel ─────────────────────────────────────────────────────────
+    #  Cups panel ─
 
     def _build_cups_panel(self):
         grid_wrap = BoxLayout(orientation="vertical", padding=[6, 6, 6, 6], spacing=0,
@@ -1103,7 +1103,7 @@ class TrackerApp(App):
         grid_wrap.add_widget(grid)
         return grid_wrap
 
-    # ── Tracks panel ───────────────────────────────────────────────────────
+    #  Tracks panel ─
 
     def _build_tracks_panel(self):
         scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False, do_scroll_y=True,
@@ -1162,7 +1162,7 @@ class TrackerApp(App):
         scroll.add_widget(outer)
         return scroll
 
-    # ── Items panel ────────────────────────────────────────────────────────
+    #  Items panel 
 
     def _build_items_panel(self):
         # 6 cols × 3 rows fills the window without scrolling.
@@ -1202,7 +1202,7 @@ class TrackerApp(App):
         wrap.add_widget(grid)
         return wrap
 
-    # ── tab enable/disable helper ──────────────────────────────────────────
+    #  tab enable/disable helper 
 
     def _apply_tab_states(self, disabled: set) -> None:
         """Re-style all tab buttons to match the given disabled set."""
@@ -1216,7 +1216,7 @@ class TrackerApp(App):
             if is_disabled:
                 _paint_bg(btn, (0.03, 0.04, 0.12, 1), (0.12, 0.16, 0.32, 1))
                 lbl = btn.children[0]
-                lbl.text  = f"{tab_name} ✕"
+                lbl.text  = f"{tab_name}"
                 lbl.color = list((0.22, 0.26, 0.40, 1))
                 lbl.bold  = False
             else:
@@ -1229,16 +1229,16 @@ class TrackerApp(App):
         if self._active_tab in self._disabled_tabs:
             self._show_tab("Cups")
 
-    # ── tick ───────────────────────────────────────────────────────────────
+    #  tick ─
 
     def _tick(self, _dt):
         state = _read_state()
 
         connected = state["connected"]
 
-        # ── connection state transitions ────────────────────────────────────
+        #  connection state transitions 
         if connected and not self._was_connected:
-            # Just connected — unlock tabs per slot_data, switch to Cups
+            # Just connected - unlock tabs per slot_data, switch to Cups
             self._was_connected = True
             new_disabled: set[str] = set()
             if not state["include_race_checks"]:
@@ -1249,17 +1249,17 @@ class TrackerApp(App):
             self._show_tab("Cups")
 
         elif not connected and self._was_connected:
-            # Lost connection after being connected — lock all tabs, back to login
+            # Lost connection after being connected - lock all tabs, back to login
             self._was_connected = False
             self._apply_tab_states({"Cups", "Tracks", "Items"})
             self._show_login_panel()
 
         elif not connected and not self._was_connected and AP_SERVER:
             # Still trying to connect (credentials entered but not yet connected)
-            # Keep login panel showing — nothing to switch
+            # Keep login panel showing - nothing to switch
             pass
 
-        # ── status bar ─────────────────────────────────────────────────────
+        #  status bar ─
         if connected:
             self._dot.color = [0, 0.878, 0.376, 1]
             self._txt.text  = f"Connected — {AP_SLOT} @ {AP_SERVER}"

@@ -201,6 +201,7 @@ Thumbs.db
 # MKWii AP
 mkwii_ap_config.json
 mkwii_client.spec
+tracker_process.spec
 report.log
 itemqueues/
 tracker_crash.log
