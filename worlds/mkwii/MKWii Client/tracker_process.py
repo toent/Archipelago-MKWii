@@ -124,8 +124,8 @@ _CUP_GRID_POS = {
     "Flower Cup":    (1, 0),
     "Star Cup":      (2, 0),
     "Special Cup":   (3, 0),
-    "Banana Cup":    (0, 1),
     "Shell Cup":     (1, 1),
+    "Banana Cup":    (0, 1),
     "Leaf Cup":      (2, 1),
     "Lightning Cup": (3, 1),
 }
