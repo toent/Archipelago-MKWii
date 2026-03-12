@@ -20,8 +20,10 @@ presently, Archipelago is also the randomizer itself.
 7. The client will ask for your savefile, choose the one you get by going to `Dolphin > MKWii > Right Click > Open Wii Save Folder`.
 8. If you opt for **Auto Dolphin start**, the client will ask for your ROM and your Dolphin make sure to assign them correctly.
 9. If you opt for **Manual Dolphin start**, make sure the client is at the license selection question before opening your emulation instance.
-10. Follow other instructions posed by the client and connect to the Archipelago.
-11. The client includes a text client and tracker window, they will open automatically.
+10. If you opt for **Auto tracker start**, the tracker will be opened once you connect to archipelago. You can still close it seperately and open it seperately as well.
+11. If you opt for **Manual track start**, the tracker wont open and you need to run `mkwii tracker.exe` or `tracker_process.py` and connect to the archipelago.
+12. Follow other instructions posed by the client and connect to the Archipelago.
+13. The client includes a text client and tracker window, they will open automatically.
 
 ### Good to know (READ THIS):
 * The client might not connect to dolphin properly sometimes eventhough some text says it is, use `/status` in the client to check for connection or check the tracker window. To fix this, just restart the client and try again or try `/hook` in the client.
