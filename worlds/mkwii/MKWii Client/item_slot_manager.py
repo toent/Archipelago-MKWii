@@ -437,7 +437,7 @@ class ItemSlotManager:
                 )
                 return items, weights
 
-        # No unlocked items found anywhere — signal empty slot
+        # No unlocked items found anywhere - signal empty slot
         if self.unlocked_items:
             fallback = list(self.unlocked_items)
             logger.warning("[ItemSlot] All placement pools empty — using equal-weight fallback")
