@@ -528,7 +528,7 @@ class ItemSlotManager:
 
     async def run_inject_loop(self) -> None:
         """
-        Fast inject loop — runs at 0.125s (quarter of the main 0.5s poll).
+        Fast inject loop - runs at 0.016s (every frame).
         Started as an asyncio task by the client after the manager is created.
         Only does item injection; lap/check logic stays in poll().
         """
@@ -539,7 +539,7 @@ class ItemSlotManager:
                     self._inject(self._inject_ih_ptr, self._inject_placement)
             except Exception as e:
                 logger.warning(f"[ItemSlot] Inject loop error: {e}")
-            await asyncio.sleep(0.125)
+            await asyncio.sleep(0.016)
 
     def _inject(self, ih_ptr: int, placement: int) -> None:
         try:
