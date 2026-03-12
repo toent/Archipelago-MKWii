@@ -20,30 +20,25 @@ AP_SERVER  = sys.argv[1] if len(sys.argv) > 1 else ""
 AP_SLOT    = sys.argv[2] if len(sys.argv) > 2 else ""
 AP_PASS    = sys.argv[3] if len(sys.argv) > 3 else ""
 
-# If credentials were not supplied via args, the Kivy UI will show a login screen and populate these globals before starting the AP thread.
 _STANDALONE_MODE = AP_SERVER == "" or AP_SLOT == ""
 
 if getattr(sys, "frozen", False):
-    # Bundled assets live in _MEIPASS (PyInstaller's temp extract dir), not beside the exe. Log file stays beside the exe.
     _HERE = Path(sys._MEIPASS)
     _LOG_DIR = Path(sys.executable).parent
 else:
     _HERE = Path(__file__).parent
     _LOG_DIR = _HERE
 
-# Write all uncaught exceptions to a log file beside this script, because subprocess stdout/stderr may not be visible to the user.
 _LOG = _LOG_DIR / "tracker_crash.log"
 
 def _excepthook(exc_type, exc_value, exc_tb):
     import traceback
     with open(_LOG, "w", encoding="utf-8") as _f:
         traceback.print_exception(exc_type, exc_value, exc_tb, file=_f)
-    # Also try original stderr in case a console is attached
     traceback.print_exception(exc_type, exc_value, exc_tb)
 
 sys.excepthook = _excepthook
 
-# Make the parent Archipelago dir importable (for worlds.mkwii.*)
 sys.path.insert(0, str(_HERE.parent))
 
 
@@ -55,7 +50,6 @@ def _ap_version() -> dict:
         return {"major": major, "minor": minor, "build": build, "class": "Version"}
     except Exception:
         pass
-    # Fallback: parse from CommonClient if available
     try:
         import CommonClient
         v = CommonClient.ClientStatus
@@ -116,8 +110,6 @@ TIER_SYMBOLS = {
     "3_star":    "⭐⭐⭐",
 }
 
-# Cup icon spritesheet - sliced with Pillow at startup into temp PNG files,
-# then loaded as normal KvImage source paths.
 _CUP_SPRITESHEET = _HERE / "img" / "cup_icons.png"
 _CUP_GRID_POS = {
     "Mushroom Cup":  (0, 0),
@@ -130,13 +122,11 @@ _CUP_GRID_POS = {
     "Lightning Cup": (3, 1),
 }
 CUPS = list(_CUP_GRID_POS.keys())
-# Maps cup name -> temp file path string; populated by _slice_cup_icons()
 CUP_ICON_PATHS: dict[str, str] = {}
 
 
 def _remove_bg_floodfill(cell_arr, threshold: int = 15):
-    """Remove background by flood-filling connected near-black regions from all edges.
-    Preserves dark pixels that are interior to the icon (outlines, shadows)."""
+    """Remove background by flood-filling connected near-black regions from all edges."""
     from scipy.ndimage import label as _label
     import numpy as _np
     brightness = cell_arr[:, :, :3].astype(int).sum(axis=2)
@@ -196,7 +186,6 @@ def _slice_cup_icons() -> None:
 _slice_cup_icons()
 
 CCS  = ["50cc", "100cc", "150cc", "Mirror"]
-CELL_SIZE = 68
 
 TRACKS = {
     "Mushroom Cup":  ["Luigi Circuit", "Moo Moo Meadows", "Mushroom Gorge", "Toad's Factory"],
@@ -230,7 +219,6 @@ POWERUP_ITEMS = [
     "Powerup: Banana",
 ]
 
-# Item icon spritesheet - 11 cols x 2 rows, black background
 _ITEM_SPRITESHEET = _HERE / "img" / "item_icons.png"
 _ITEM_GRID_COLS = 9
 _ITEM_GRID_POS = {
@@ -254,15 +242,11 @@ _ITEM_GRID_POS = {
     "Powerup: Triple Mushrooms":     (8, 1),
 }
 
-# Maps item name -> temp PNG path; populated by _slice_item_icons()
 ITEM_ICON_PATHS: dict[str, str] = {}
 
 
 def _slice_item_icons() -> None:
-    """Slice item_icons.png into per-item temp PNGs using Pillow.
-    Each icon is cropped tight to its content bbox, then pasted centred onto
-    a uniform canvas so all icons appear the same size in the UI.
-    """
+    """Slice item_icons.png into per-item temp PNGs using Pillow."""
     if not _ITEM_SPRITESHEET.exists():
         return
     try:
@@ -274,7 +258,6 @@ def _slice_item_icons() -> None:
         arr     = np.array(sheet)
         tmp_dir = Path(tempfile.mkdtemp(prefix="mkwii_items_"))
 
-        # First pass: collect all tight-crop sizes to find the common canvas size
         crops = {}
         for item, (col, row) in _ITEM_GRID_POS.items():
             l = int(col * cw);       u = int(row * ch)
@@ -288,11 +271,9 @@ def _slice_item_icons() -> None:
             cmin, cmax = np.where(np.any(mask, axis=0))[0][[0, -1]]
             crops[item] = cell[rmin:rmax+1, cmin:cmax+1]
 
-        # Canvas = largest content dimensions across all icons
         canvas_w = max(c.shape[1] for c in crops.values())
         canvas_h = max(c.shape[0] for c in crops.values())
 
-        # Second pass: paste each tight crop centred on the canvas
         for item, crop in crops.items():
             canvas = np.zeros((canvas_h, canvas_w, 4), dtype=np.uint8)
             ch_off = (canvas_h - crop.shape[0]) // 2
@@ -318,15 +299,14 @@ for _t in TIER_HIERARCHY:
     TIER_NORMALIZE[_readable.lower()] = _t
 
 
-# Shared state - written by the asyncio AP thread, read by Kivy tick
 _state_lock = threading.Lock()
 _state = {
     "connected":              False,
-    "completed_locations":    {},    # "Cup||cc" -> tier str
-    "track_locations":        {},    # "Track||cc" -> True/False
-    "unlocked_items":         [],    # list of "Powerup: X" strings
-    "include_race_checks":    True,  # whether Tracks tab is enabled
-    "enable_item_randomization": True,  # whether Items tab is enabled
+    "completed_locations":    {},
+    "track_locations":        {},
+    "unlocked_items":         [],
+    "include_race_checks":    True,
+    "enable_item_randomization": True,
 }
 
 
@@ -347,8 +327,7 @@ def _read_state() -> dict:
         }
 
 
-
-# AP websocket client (runs in a background thread)
+# AP websocket client
 
 
 def _ensure_ws_scheme(addr: str) -> str:
@@ -393,7 +372,6 @@ def _parse_track_location(name: str, track_locs: dict) -> None:
     track, cc = parts
     if cc not in CCS:
         return
-    # Verify it's a real track
     for tracks in TRACKS.values():
         if track in tracks:
             track_locs[f"{track}||{cc}"] = True
@@ -407,14 +385,11 @@ async def _ap_client_loop() -> None:
         print("[Tracker] websockets library not found - pip install websockets")
         return
 
-    # Try wss:// first (archipelago.gg and most hosted servers require it),
-    # fall back to ws:// for local/LAN servers.
     if AP_SERVER.startswith("ws://") or AP_SERVER.startswith("wss://"):
         uri_candidates = [AP_SERVER]
     else:
         uri_candidates = [f"wss://{AP_SERVER}", f"ws://{AP_SERVER}"]
 
-    # Build location lookup from worlds package
     location_name_to_id: dict[str, int] = {}
     id_to_name:          dict[int, str]  = {}
     item_id_to_name:     dict[int, str]  = {}
@@ -444,14 +419,12 @@ async def _ap_client_loop() -> None:
                 print("[Tracker] All URI candidates failed, retrying in 5s...")
                 await asyncio.sleep(5)
                 continue
-            # Cache the working scheme so reconnects skip the probe
             uri_candidates = [uri]
             print(f"[Tracker] Connecting to {uri} as '{AP_SLOT}'...")
             async with websockets.connect(uri, ping_interval=30) as ws:
 
-                #  handshake 
+                # handshake
 
-                # 1. Receive RoomInfo
                 raw = await ws.recv()
                 msgs = json.loads(raw)
                 room_info = next((m for m in msgs if m["cmd"] == "RoomInfo"), None)
@@ -460,14 +433,13 @@ async def _ap_client_loop() -> None:
                     await asyncio.sleep(5)
                     continue
 
-                # 2. GetDataPackage
                 await ws.send(json.dumps([{"cmd": "GetDataPackage", "games": ["Mario Kart Wii"]}]))
                 raw = await ws.recv()
                 msgs = json.loads(raw)
-                dp = next((m for m in msgs if m["cmd"] == "DataPackage"), None)
-                if dp:
+                dp_msg = next((m for m in msgs if m["cmd"] == "DataPackage"), None)
+                if dp_msg:
                     try:
-                        game_data = dp["data"]["games"].get("Mario Kart Wii", {})
+                        game_data = dp_msg["data"]["games"].get("Mario Kart Wii", {})
                         loc_map   = game_data.get("location_name_to_id", {})
                         item_map  = game_data.get("item_name_to_id", {})
                         if loc_map:
@@ -478,7 +450,6 @@ async def _ap_client_loop() -> None:
                     except Exception as e:
                         print(f"[Tracker] DataPackage parse error: {e}")
 
-                # 3. Connect
                 connect_msg = {
                     "cmd":          "Connect",
                     "game":         "Mario Kart Wii",
@@ -504,12 +475,10 @@ async def _ap_client_loop() -> None:
                     await asyncio.sleep(10)
                     continue
 
-                #  slot_data feature flags 
-                slot_data          = connected_msg.get("slot_data", {})
-                include_race       = bool(slot_data.get("include_race_checks", True))
-                enable_items       = bool(slot_data.get("enable_item_randomization", True))
-                # starting_items is a list of raw item name strings, e.g. ["Fake Item Box"]
-                # Map them to "Powerup: X" form so they show as unlocked from the start.
+                # slot_data feature flags
+                slot_data    = connected_msg.get("slot_data", {})
+                include_race = bool(slot_data.get("include_race_checks", True))
+                enable_items = bool(slot_data.get("enable_item_randomization", True))
                 _GAME_TO_AP = {v: k for k, v in {
                     "Powerup: Red Shell":           "Red Shell",
                     "Powerup: Triple Bananas":      "Triple Bananas",
@@ -537,11 +506,9 @@ async def _ap_client_loop() -> None:
                     if ap_name and ap_name not in starting_unlocked:
                         starting_unlocked.append(ap_name)
 
-                #  initial state from checked_locations ─
                 checked_ids: list[int] = connected_msg.get("checked_locations", [])
                 completed: dict[str, str] = {}
                 track_locs: dict[str, bool] = {}
-                # Seed with starting items so they show unlocked immediately
                 unlocked_items: list[str] = list(starting_unlocked)
 
                 for loc_id in checked_ids:
@@ -551,7 +518,6 @@ async def _ap_client_loop() -> None:
                     _parse_cup_location(name, completed)
                     _parse_track_location(name, track_locs)
 
-                # ReceivedItems may follow immediately in the same batch
                 for m in msgs:
                     if m["cmd"] == "ReceivedItems":
                         for net_item in m.get("items", []):
@@ -571,7 +537,7 @@ async def _ap_client_loop() -> None:
                       f"race={include_race}, items={enable_items}, "
                       f"starting_unlocked={starting_unlocked}")
 
-                #  main receive loop 
+                # main receive loop
                 async for raw in ws:
                     msgs = json.loads(raw)
                     changed = False
@@ -580,7 +546,7 @@ async def _ap_client_loop() -> None:
                         cmd = m.get("cmd")
 
                         if cmd == "LocationInfo":
-                            pass  # not needed by tracker
+                            pass
 
                         elif cmd == "ReceivedItems":
                             for net_item in m.get("items", []):
@@ -600,7 +566,7 @@ async def _ap_client_loop() -> None:
                                 changed = True
 
                         elif cmd == "PrintJSON":
-                            pass  # ignore chat/print messages
+                            pass
 
                     if changed:
                         _update_state(
@@ -616,7 +582,6 @@ async def _ap_client_loop() -> None:
 
 
 async def _ap_thread_main() -> None:
-    # In standalone mode, spin until the UI login form populates the globals
     global AP_SERVER, AP_SLOT
     while not AP_SERVER or not AP_SLOT:
         await asyncio.sleep(0.2)
@@ -629,18 +594,51 @@ def _run_ap_thread() -> None:
     loop.run_until_complete(_ap_thread_main())
 
 
-
-# Kivy UI  (identical visual structure to the original)
-
+# Kivy UI
 
 os.environ.setdefault("KIVY_NO_CONSOLELOG", "1")
 
 from kivy.config import Config
 
-_GRID_W = (len(CUPS) + 1) * CELL_SIZE + len(CUPS) * 2 + 2 * 6
-_GRID_H = (len(CCS)  + 1) * CELL_SIZE + len(CCS)  * 2 + 2 * 6
-_W = _GRID_W + 2 * 6
-_H = _GRID_H + 84 + 6 + 30 + 4 + 2 * 6
+# dp() and sp() require Kivy's Config to be imported first, but the Window
+# is not yet open. Kivy resolves DPI from the platform metrics at this point,
+# so dp()/sp() already return correct scaled values for the current display.
+from kivy.metrics import dp, sp
+
+# All size constants expressed in density-independent pixels so the UI
+# scales automatically across HiDPI laptops and different display scales.
+CELL_SIZE    = int(dp(68))
+PAD          = int(dp(6))
+TOP_BAR_H    = int(dp(84))
+TAB_BAR_H    = int(dp(30))
+TAB_BTN_W    = int(dp(90))
+SPACING_CELL = int(dp(2))
+SPACING_UI   = int(dp(4))
+SPACING_BAR  = int(dp(8))
+DOT_W        = int(dp(18))
+ICON_CUP_SZ  = int(dp(36))
+ICON_AP_SZ   = int(dp(56))
+ICON_MKWII_SZ = int(dp(72))
+
+# Typography scale — use these names everywhere, never raw sp() for font sizes.
+# H1:    major titles (top bar heading, dot)
+# H2:    section headings (login title, cup section "Flower Cup", connect button)
+# H3:    body emphasis (track names, login inputs, tab buttons, cc labels, status)
+# H4:    secondary labels (cup name under icon, "Tracker" corner, login status)
+# TEXT:  default cell content (LicenseCell / TrackCell base, ItemCell label)
+# SMALL: smallest labels (ItemCell name when fixed)
+FS_H1    = sp(18)
+FS_H2    = sp(15)
+FS_H3    = sp(13)
+FS_H4    = sp(11)
+FS_TEXT  = sp(10)
+FS_SMALL = sp(9)
+
+_GRID_W = (len(CUPS) + 1) * CELL_SIZE + len(CUPS) * SPACING_CELL + 2 * PAD
+_GRID_H = (len(CCS)  + 1) * CELL_SIZE + len(CCS)  * SPACING_CELL + 2 * PAD
+_W = _GRID_W + 2 * PAD
+_H = _GRID_H + TOP_BAR_H + SPACING_UI + TAB_BAR_H + SPACING_UI + 2 * PAD
+
 Config.set("graphics", "width",      str(_W))
 Config.set("graphics", "height",     str(_H))
 Config.set("graphics", "resizable",  "0")
@@ -706,18 +704,22 @@ def _paint_bg(widget, bg, border=None):
             widget.bind(size=_upd, pos=_upd)
 
 
-def _label(text, fg, font_size="10pt", bold=False, emoji=False, **kw):
+def _label(text, fg, font_size=None, bold=False, emoji=False, **kw):
     kw.setdefault("halign", "center")
     kw.setdefault("valign", "middle")
     if emoji:
         kw["font_name"] = _EMOJI_FONT
+    if font_size is None:
+        font_size = FS_TEXT
     l = Label(text=text, color=list(fg), font_size=font_size, bold=bold, **kw)
     l.bind(size=l.setter("text_size"))
     return l
 
 
-def _header_cell(text, bg, fg, font_size="10pt", bold=False):
-    cell = FloatLayout(size_hint=(None, None), size=(CELL_SIZE, CELL_SIZE))
+def _header_cell(text, bg, fg, font_size=None, bold=False):
+    if font_size is None:
+        font_size = FS_TEXT
+    cell = FloatLayout(size_hint=(1, 1))
     _paint_bg(cell, bg, BORDER_LIGHT)
     cell.add_widget(_label(text, fg, font_size=font_size, bold=bold,
                            pos_hint={"center_x": 0.5, "center_y": 0.5},
@@ -727,7 +729,7 @@ def _header_cell(text, bg, fg, font_size="10pt", bold=False):
 
 def _centered_image(path, w, h):
     anchor = AnchorLayout(anchor_x="center", anchor_y="center",
-                          size_hint=(None, 1), width=w + 4)
+                          size_hint=(None, 1), width=w + PAD)
     anchor.add_widget(KvImage(source=str(path),
                               size_hint=(None, None), size=(w, h),
                               allow_stretch=True, keep_ratio=True,
@@ -737,14 +739,14 @@ def _centered_image(path, w, h):
 
 class LicenseCell:
     def __init__(self):
-        self.widget = FloatLayout(size_hint=(None, None), size=(CELL_SIZE, CELL_SIZE))
+        self.widget = FloatLayout(size_hint=(1, 1))
         with self.widget.canvas.before:
             self._bg_c = Color(*BG_CELL_EMPTY)
-            self._bg_r = Rectangle(size=(CELL_SIZE, CELL_SIZE))
+            self._bg_r = Rectangle(size=(1, 1))
             self._bd_c = Color(*BORDER_LIGHT)
-            self._bd_l = Line(rectangle=(0, 0, CELL_SIZE, CELL_SIZE), width=1)
+            self._bd_l = Line(rectangle=(0, 0, 1, 1), width=1)
         self.widget.bind(pos=self._sync, size=self._sync)
-        self._lbl = Label(text="", color=list(TEXT_DIM), font_size="11pt",
+        self._lbl = Label(text="", color=list(TEXT_DIM), font_size=FS_TEXT,
                           font_name=_EMOJI_FONT,
                           halign="center", valign="middle",
                           pos_hint={"center_x": 0.5, "center_y": 0.5},
@@ -758,6 +760,8 @@ class LicenseCell:
         self._bg_r.pos  = (x, y)
         self._bg_r.size = (w, h)
         self._bd_l.rectangle = (x, y, w, h)
+        # Scale emoji symbol proportionally to cell size
+        self._lbl.font_size = max(FS_TEXT, int(min(w, h) * 0.32))
 
     def set_tier(self, tier):
         self._bg_c.rgba = list(TIER_BG.get(tier, BG_CELL_EMPTY))
@@ -776,7 +780,7 @@ class TrackCell:
             self._bd_c = Color(*BORDER_LIGHT)
             self._bd_l = Line(rectangle=(0, 0, CELL_SIZE, CELL_SIZE), width=1)
         self.widget.bind(pos=self._sync, size=self._sync)
-        self._lbl = Label(text="", color=list(TEXT_DIM), font_size="11pt",
+        self._lbl = Label(text="", color=list(TEXT_DIM), font_size=FS_TEXT,
                           bold=True, halign="center", valign="middle",
                           pos_hint={"center_x": 0.5, "center_y": 0.5},
                           size_hint=(1, 1))
@@ -789,6 +793,7 @@ class TrackCell:
         self._bg_r.pos  = (x, y)
         self._bg_r.size = (w, h)
         self._bd_l.rectangle = (x, y, w, h)
+        self._lbl.font_size = max(FS_SMALL, int(min(w, h) * 0.18))
 
     def set_done(self, done: bool):
         if done:
@@ -804,37 +809,38 @@ class TrackCell:
 
 
 class ItemCell:
-    # Dimensions are set dynamically by _build_items_panel; defaults are fallbacks
-    _ITEM_W = 103
-    _ITEM_H = 80
+    # Icon size in dp — scales with display density, independent of cell pixel size
+    _ICON_DP = int(dp(46))
+    _LBL_H   = int(dp(22))
 
-    def __init__(self, name: str, w: int = 103, h: int = 80):
+    def __init__(self, name: str):
         self._name  = name
         self._short = name.replace("Powerup: ", "")
-        self.widget = FloatLayout(size_hint=(None, None), size=(w, h))
+        # size_hint=(1,1) so GridLayout sizes the cell; canvas callbacks keep bg/border correct
+        self.widget = FloatLayout(size_hint=(1, 1))
         with self.widget.canvas.before:
             self._bg_c = Color(*BG_CELL_EMPTY)
-            self._bg_r = Rectangle(size=(w, h))
+            self._bg_r = Rectangle(size=(1, 1))
             self._bd_c = Color(*BORDER_LIGHT)
-            self._bd_l = Line(rectangle=(0, 0, w, h), width=1)
+            self._bd_l = Line(rectangle=(0, 0, 1, 1), width=1)
         self.widget.bind(pos=self._sync, size=self._sync)
 
-        icon_size = int(min(w - 8, h - 24) * 0.75)  # 75% of cell, leave room for name
+        icon_size = self._ICON_DP
         if name in ITEM_ICON_PATHS:
             self._icon_img = KvImage(
                 source=ITEM_ICON_PATHS[name],
                 size_hint=(None, None), size=(icon_size, icon_size),
                 allow_stretch=True, keep_ratio=True,
-                pos_hint={"center_x": 0.5, "center_y": 0.62})
+                pos_hint={"center_x": 0.5, "center_y": 0.60})
             self.widget.add_widget(self._icon_img)
         else:
             self._icon_img = None
 
-        self._name_lbl = Label(text=self._short, font_size="10pt", bold=True,
+        self._name_lbl = Label(text=self._short, font_size=FS_SMALL, bold=True,
                                color=list(TEXT_DIM),
                                halign="center", valign="middle",
-                               pos_hint={"center_x": 0.5, "center_y": 0.12},
-                               size_hint=(1, None), height=h)
+                               pos_hint={"center_x": 0.5, "y": 0},
+                               size_hint=(1, None), height=self._LBL_H)
         self._name_lbl.bind(size=self._name_lbl.setter("text_size"))
         self.widget.add_widget(self._name_lbl)
 
@@ -844,6 +850,14 @@ class ItemCell:
         self._bg_r.pos  = (x, y)
         self._bg_r.size = (w, h)
         self._bd_l.rectangle = (x, y, w, h)
+        # Label strip is a fixed dp height; icon fills the space above it
+        lbl_h = int(dp(22))
+        icon_sz = max(int(dp(24)), int(min(w, h - lbl_h) * 0.58))
+        if self._icon_img:
+            self._icon_img.size = (icon_sz, icon_sz)
+        # Font is fixed at sp(10) so it never grows too large
+        self._name_lbl.font_size = FS_TEXT
+        self._name_lbl.height    = lbl_h
 
     def set_unlocked(self, unlocked: bool):
         if unlocked:
@@ -868,51 +882,54 @@ class TrackerApp(App):
         self.tcells        = {}
         self.icells        = {}
         self._active_tab   = "Cups"
-        # All tabs start disabled; enabled once AP connection is established
         self._disabled_tabs: set[str] = {"Cups", "Tracks", "Items"}
-        # Track previous connected state to detect connect/disconnect transitions
         self._was_connected: bool = False
 
-        root = BoxLayout(orientation="vertical", padding=[6, 6, 6, 6], spacing=4)
+        root = BoxLayout(orientation="vertical",
+                         padding=[PAD, PAD, PAD, PAD], spacing=SPACING_UI)
         _paint_bg(root, BG_OUTER)
 
-        #  top bar 
+        # top bar
         top_bar = BoxLayout(orientation="horizontal",
-                            size_hint=(1, None), height=84,
-                            padding=[6, 6, 6, 6], spacing=8)
+                            size_hint=(1, None), height=TOP_BAR_H,
+                            padding=[PAD, PAD, PAD, PAD], spacing=SPACING_BAR)
         _paint_bg(top_bar, BG_CARD, BORDER_GLOW)
 
         if IMG_MKWII.exists():
-            top_bar.add_widget(_centered_image(IMG_MKWII, 72, 72))
+            top_bar.add_widget(_centered_image(IMG_MKWII, ICON_MKWII_SZ, ICON_MKWII_SZ))
         else:
             top_bar.add_widget(_label("MKWii", TEXT_YELLOW, bold=True,
-                                      size_hint=(None, 1), width=72))
+                                      size_hint=(None, 1), width=ICON_MKWII_SZ))
 
-        info_col = BoxLayout(orientation="vertical", spacing=2)
+        info_col = BoxLayout(orientation="vertical", spacing=int(dp(2)))
         _paint_bg(info_col, BG_CARD)
         info_col.add_widget(_label("Mario Kart Wii  •  AP Tracker", TEXT_YELLOW,
-                                   font_size="13pt", bold=True,
+                                   font_size=FS_H1, bold=True,
                                    size_hint_y=0.55, halign="left"))
 
-        status_row = BoxLayout(orientation="horizontal", spacing=3, size_hint_y=0.45)
+        status_row = BoxLayout(orientation="horizontal",
+                               spacing=int(dp(3)), size_hint_y=0.45)
         _paint_bg(status_row, BG_CARD)
-        self._dot = Label(text="•", color=list(TEXT_ORANGE), font_size="14pt",
-                          size_hint=(None, 1), width=18)
-        self._txt = _label("Enter credentials to connect…" if _STANDALONE_MODE else f"Connecting to {AP_SERVER}…", TEXT_DIM,
-                            font_size="9pt", halign="left", size_hint=(1, 1))
+        self._dot = Label(text="•", color=list(TEXT_ORANGE), font_size=FS_H1,
+                          size_hint=(None, 1), width=DOT_W)
+        self._txt = _label(
+            "Enter credentials to connect…" if _STANDALONE_MODE
+            else f"Connecting to {AP_SERVER}…",
+            TEXT_DIM, font_size=FS_H3, halign="left", size_hint=(1, 1))
         status_row.add_widget(self._dot)
         status_row.add_widget(self._txt)
         info_col.add_widget(status_row)
         top_bar.add_widget(info_col)
 
         if IMG_AP.exists():
-            top_bar.add_widget(_centered_image(IMG_AP, 56, 56))
+            top_bar.add_widget(_centered_image(IMG_AP, ICON_AP_SZ, ICON_AP_SZ))
 
         root.add_widget(top_bar)
 
-        #  tab bar 
+        # tab bar
         tab_bar = BoxLayout(orientation="horizontal",
-                            size_hint=(1, None), height=30, spacing=4)
+                            size_hint=(1, None), height=TAB_BAR_H,
+                            spacing=SPACING_UI)
         _paint_bg(tab_bar, BG_OUTER)
         self._tab_buttons = {}
         for tab_name in ("Cups", "Tracks", "Items"):
@@ -922,7 +939,7 @@ class TrackerApp(App):
         tab_bar.add_widget(BoxLayout(size_hint_x=1))
         root.add_widget(tab_bar)
 
-        #  content 
+        # content
         self._content = BoxLayout(orientation="vertical", size_hint=(1, 1))
         _paint_bg(self._content, BG_OUTER)
         root.add_widget(self._content)
@@ -938,56 +955,55 @@ class TrackerApp(App):
         else:
             self._show_tab("Cups")
 
-        # Start AP background thread (will wait for creds if standalone)
         t = threading.Thread(target=_run_ap_thread, daemon=True)
         t.start()
 
         Clock.schedule_interval(self._tick, 0.5)
         return root
 
-    #  login panel (standalone mode) 
+    # login panel (standalone mode)
 
     def _show_login_panel(self):
         from kivy.uix.textinput import TextInput
         from kivy.uix.button   import Button
 
         self._content.clear_widgets()
-        panel = BoxLayout(orientation="vertical", padding=20, spacing=12,
+        panel = BoxLayout(orientation="vertical",
+                          padding=int(dp(20)), spacing=int(dp(12)),
                           size_hint=(1, 1))
         _paint_bg(panel, BG_CARD, BORDER_GLOW)
 
         panel.add_widget(_label("Connect to Archipelago Server", TEXT_YELLOW,
-                                font_size="12pt", bold=True,
-                                size_hint=(1, None), height=36))
+                                font_size=FS_H2, bold=True,
+                                size_hint=(1, None), height=int(dp(44))))
 
         def _inp(hint, text=""):
             ti = TextInput(hint_text=hint, text=text,
                            multiline=False,
-                           size_hint=(1, None), height=38,
+                           size_hint=(1, None), height=int(dp(38)),
                            background_color=[0.05, 0.08, 0.22, 1],
                            foreground_color=[1, 1, 1, 1],
                            hint_text_color=[0.4, 0.5, 0.7, 1],
                            cursor_color=[1, 0.88, 0.25, 1],
-                           font_size="11pt")
+                           font_size=FS_H3)
             return ti
 
         self._inp_server = _inp("Server  (e.g. archipelago.gg:12345)", AP_SERVER)
         self._inp_slot   = _inp("Slot name", AP_SLOT)
         self._inp_pass   = _inp("Password (leave blank if none)", AP_PASS)
 
-        self._login_status = _label("", TEXT_DIM, font_size="9pt",
-                                    size_hint=(1, None), height=24)
+        self._login_status = _label("", TEXT_DIM, font_size=FS_H3,
+                                    size_hint=(1, None), height=int(dp(28)))
 
-        btn = Button(text="Connect", size_hint=(1, None), height=42,
+        btn = Button(text="Connect", size_hint=(1, None), height=int(dp(48)),
                      background_color=[0.35, 0.50, 0.83, 1],
-                     color=[1, 1, 1, 1], bold=True, font_size="11pt")
+                     color=[1, 1, 1, 1], bold=True, font_size=FS_H2)
         btn.bind(on_release=self._on_login_connect)
 
         for w in (self._inp_server, self._inp_slot, self._inp_pass,
                   self._login_status, btn):
             panel.add_widget(w)
 
-        # spacer
         panel.add_widget(BoxLayout(size_hint_y=1))
         self._content.add_widget(panel)
 
@@ -1010,16 +1026,13 @@ class TrackerApp(App):
         self._login_status.text  = f"Connecting to {server} as '{slot}'…"
         self._login_status.color = list(TEXT_DIM)
 
-        # Update status bar text
         self._txt.text  = f"Connecting to {server}…"
         self._txt.color = list(TEXT_DIM)
 
-        # Stay on login panel - _tick will switch to Cups once connected
-
-    #  tab helpers 
+    # tab helpers
 
     def _make_tab_btn(self, label: str, active: bool, disabled: bool = False):
-        btn = FloatLayout(size_hint=(None, None), size=(90, 30))
+        btn = FloatLayout(size_hint=(None, None), size=(TAB_BTN_W, TAB_BAR_H))
         if disabled:
             bg     = (0.03, 0.04, 0.12, 1)
             border = (0.12, 0.16, 0.32, 1)
@@ -1029,10 +1042,8 @@ class TrackerApp(App):
             border = BORDER_GLOW if active else BORDER_LIGHT
             fg     = TEXT_YELLOW if active else TEXT_DIM
         _paint_bg(btn, bg, border)
-        # Strikethrough-style suffix to make disabled state obvious
-        display = f"{label}" if disabled else label
-        btn.add_widget(_label(display, fg,
-                              font_size="9pt", bold=(active and not disabled),
+        btn.add_widget(_label(label, fg,
+                              font_size=FS_H3, bold=(active and not disabled),
                               pos_hint={"center_x": 0.5, "center_y": 0.5},
                               size_hint=(1, 1)))
         btn.bind(on_touch_down=self._on_tab_touch)
@@ -1043,7 +1054,7 @@ class TrackerApp(App):
             for name, w in self._tab_buttons.items():
                 if w is btn_widget:
                     if name in self._disabled_tabs:
-                        return  # silently ignore clicks on disabled tabs
+                        return
                     self._show_tab(name)
                     return
 
@@ -1055,7 +1066,7 @@ class TrackerApp(App):
         self._content.add_widget(self._panels[name])
         for tname, btn in self._tab_buttons.items():
             if tname in self._disabled_tabs:
-                continue  # leave disabled tabs with their greyed style
+                continue
             active = (tname == name)
             btn.canvas.before.clear()
             _paint_bg(btn, BG_CARD if active else BG_OUTER,
@@ -1064,37 +1075,46 @@ class TrackerApp(App):
             lbl.color = list(TEXT_YELLOW if active else TEXT_DIM)
             lbl.bold  = active
 
-    #  Cups panel ─
+    # Cups panel
 
     def _build_cups_panel(self):
-        grid_wrap = BoxLayout(orientation="vertical", padding=[6, 6, 6, 6], spacing=0,
+        grid_wrap = BoxLayout(orientation="vertical",
+                              padding=[PAD, PAD, PAD, PAD], spacing=0,
                               size_hint=(1, 1))
         _paint_bg(grid_wrap, BG_CARD, BORDER_GLOW)
 
-        grid = GridLayout(cols=len(CUPS) + 1, spacing=2, padding=0,
-                          size_hint=(None, None), width=_GRID_W)
-        grid.bind(minimum_height=grid.setter("height"))
+        # size_hint=(1,1) fills the card; GridLayout divides equally across
+        # 9 cols x 5 rows with no manual pixel arithmetic needed.
+        grid = GridLayout(cols=len(CUPS) + 1,
+                          spacing=SPACING_CELL, padding=0,
+                          size_hint=(1, 1))
 
-        grid.add_widget(_header_cell("Tracker", BG_OUTER, TEXT_DIM, font_size="9pt"))
+        grid.add_widget(_header_cell("Tracker", BG_OUTER, TEXT_DIM, font_size=FS_H3))
 
         for cup in CUPS:
             short = cup.replace(" Cup", "")
-            hdr = FloatLayout(size_hint=(None, None), size=(CELL_SIZE, CELL_SIZE))
+            hdr = FloatLayout(size_hint=(1, 1))
             _paint_bg(hdr, BG_HEADER_ROW, BORDER_LIGHT)
             if cup in CUP_ICON_PATHS:
-                hdr.add_widget(KvImage(source=CUP_ICON_PATHS[cup],
-                                       size_hint=(None, None), size=(36, 36),
-                                       allow_stretch=True, keep_ratio=True,
-                                       pos_hint={"center_x": 0.5, "center_y": 0.65}))
-            hdr.add_widget(_label(short, TEXT_DIM, font_size="7pt",
-                                  pos_hint={"center_x": 0.5, "center_y": 0.18},
-                                  size_hint=(1, None), height=CELL_SIZE))
+                img = KvImage(source=CUP_ICON_PATHS[cup],
+                              size_hint=(None, None), size=(ICON_CUP_SZ, ICON_CUP_SZ),
+                              allow_stretch=True, keep_ratio=True,
+                              pos_hint={"center_x": 0.5, "center_y": 0.65})
+                # Resize icon whenever the header cell is resized
+                def _on_hdr_size(inst, val, img=img):
+                    sz = int(min(inst.width, inst.height) * 0.52)
+                    img.size = (sz, sz)
+                hdr.bind(size=_on_hdr_size)
+                hdr.add_widget(img)
+            hdr.add_widget(_label(short, TEXT_DIM, font_size=FS_H4,
+                                  pos_hint={"center_x": 0.5, "center_y": 0.12},
+                                  size_hint=(1, None), height=int(dp(22))))
             grid.add_widget(hdr)
 
         for row_idx, cc in enumerate(CCS):
             bg_row = BG_ROW_ODD if row_idx % 2 == 0 else BG_ROW_EVEN
             grid.add_widget(_header_cell(cc, bg_row, TEXT_WHITE,
-                                         font_size="9pt", bold=True))
+                                         font_size=FS_H3, bold=True))
             for cup in CUPS:
                 cell = LicenseCell()
                 self.cells[(cup, cc)] = cell
@@ -1103,50 +1123,50 @@ class TrackerApp(App):
         grid_wrap.add_widget(grid)
         return grid_wrap
 
-    #  Tracks panel ─
+    # Tracks panel
 
     def _build_tracks_panel(self):
         scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False, do_scroll_y=True,
-                            bar_width=6, scroll_type=["bars", "content"])
+                            bar_width=int(dp(6)), scroll_type=["bars", "content"])
 
-        # cc cells are fixed; track name column fills the rest of the window
-        _OUTER_PAD  = 6 * 2          # outer BoxLayout padding left+right
-        _INNER_PAD  = 6 * 2          # outer padding inside card
-        _CELL_COLS  = len(CCS) * CELL_SIZE + (len(CCS) - 1) * 2
-        TRACK_NAME_W = _W - _OUTER_PAD - _INNER_PAD - _CELL_COLS - 12
-        row_w = TRACK_NAME_W + _CELL_COLS
+        # CC completion cells stay at fixed CELL_SIZE; track name column fills the rest.
+        # outer fills the scroll view width (size_hint_x=1) so the panel is never narrower
+        # than the window, and rows use size_hint_x=1 for the same reason.
+        _CC_COLS_W = len(CCS) * CELL_SIZE + (len(CCS) - 1) * SPACING_CELL
 
-        outer = BoxLayout(orientation="vertical", padding=[6, 6, 6, 6], spacing=2,
-                          size_hint=(None, None), width=row_w + 12)
+        outer = BoxLayout(orientation="vertical",
+                          padding=[PAD, PAD, PAD, PAD], spacing=SPACING_CELL,
+                          size_hint=(1, None))
         _paint_bg(outer, BG_CARD, BORDER_GLOW)
         outer.bind(minimum_height=outer.setter("height"))
+
+        CUP_HDR_H  = int(dp(36))
+        CUP_HDR_PD = int(dp(2))
 
         for cup in CUPS:
             short = cup.replace(" Cup", "")
 
-            cup_hdr = BoxLayout(orientation="horizontal", spacing=6,
-                                size_hint=(None, None),
-                                width=row_w, height=36,
-                                padding=[6, 2, 6, 2])
+            cup_hdr = BoxLayout(orientation="horizontal", spacing=int(dp(6)),
+                                size_hint=(1, None), height=CUP_HDR_H,
+                                padding=[PAD, CUP_HDR_PD, PAD, CUP_HDR_PD])
             _paint_bg(cup_hdr, BG_HEADER_ROW, BORDER_LIGHT)
             if cup in CUP_ICON_PATHS:
                 cup_hdr.add_widget(KvImage(source=CUP_ICON_PATHS[cup],
-                                           size_hint=(None, 1), width=30,
+                                           size_hint=(None, 1), width=int(dp(30)),
                                            allow_stretch=True, keep_ratio=True))
             cup_hdr.add_widget(_label(short + " Cup", TEXT_YELLOW,
-                                      font_size="13pt", bold=True,
+                                      font_size=FS_H2, bold=True,
                                       halign="left", size_hint=(1, 1)))
             outer.add_widget(cup_hdr)
 
             for track in TRACKS[cup]:
-                row = BoxLayout(orientation="horizontal", spacing=2,
-                                size_hint=(None, None),
-                                width=row_w, height=CELL_SIZE)
+                row = BoxLayout(orientation="horizontal", spacing=SPACING_CELL,
+                                size_hint=(1, None), height=CELL_SIZE)
 
-                name_cell = FloatLayout(size_hint=(None, None),
-                                        size=(TRACK_NAME_W, CELL_SIZE))
+                # name_cell fills all space left after the fixed CC cells
+                name_cell = FloatLayout(size_hint=(1, 1))
                 _paint_bg(name_cell, BG_ROW_ODD, BORDER_LIGHT)
-                name_cell.add_widget(_label(track, TEXT_WHITE, font_size="11pt",
+                name_cell.add_widget(_label(track, TEXT_WHITE, font_size=FS_H3,
                                             bold=True,
                                             pos_hint={"center_x": 0.5, "center_y": 0.5},
                                             size_hint=(1, 1)))
@@ -1162,47 +1182,34 @@ class TrackerApp(App):
         scroll.add_widget(outer)
         return scroll
 
-    #  Items panel 
+    # Items panel
 
     def _build_items_panel(self):
-        # 6 cols × 3 rows fills the window without scrolling.
-        # Cell sizes are fixed pixels so the grid is exactly as large as needed.
-        COLS     = 6
-        ROWS     = 3
-        SPACING  = 4
-        PAD      = 6
+        COLS    = 6
+        SPACING = int(dp(4))
+        IPAD    = PAD
 
-        # Width: fill _W minus outer root padding (6*2) minus card padding (6*2)
-        avail_w = _W - 6 * 2 - PAD * 2 - SPACING * (COLS - 1)
-        ITEM_W  = avail_w // COLS
-
-        # Height: _H minus root padding (6*2) minus top-bar+spacing (84+6)
-        #         minus tab-bar+spacing (30+4) minus card padding (6*2)
-        #         minus cell spacing rows (SPACING*(ROWS-1))
-        avail_h = (_H - 6 * 2 - (84 + 6) - (30 + 4) - PAD * 2
-                   - SPACING * (ROWS - 1))
-        ITEM_H  = avail_h // ROWS
-
-        grid_w = ITEM_W * COLS + SPACING * (COLS - 1)
-        grid_h = ITEM_H * ROWS + SPACING * (ROWS - 1)
-
-        wrap = BoxLayout(orientation="vertical", padding=[PAD, PAD, PAD, PAD],
+        wrap = BoxLayout(orientation="vertical",
+                         padding=[IPAD, IPAD, IPAD, IPAD],
                          size_hint=(1, 1))
         _paint_bg(wrap, BG_CARD, BORDER_GLOW)
 
+        # size_hint=(1, 1) fills the wrap so the grid always occupies all
+        # available space. GridLayout divides it equally across 6 cols x 3 rows.
+        # This avoids the pixel-math bug that caused the grid to sink to the
+        # bottom on displays where computed sizes differed from actual layout.
         grid = GridLayout(cols=COLS, spacing=SPACING, padding=0,
-                          size_hint=(None, None),
-                          size=(grid_w, grid_h))
+                          size_hint=(1, 1))
 
         for item_name in POWERUP_ITEMS:
-            cell = ItemCell(item_name, w=ITEM_W, h=ITEM_H)
+            cell = ItemCell(item_name)
             self.icells[item_name] = cell
             grid.add_widget(cell.widget)
 
         wrap.add_widget(grid)
         return wrap
 
-    #  tab enable/disable helper 
+    # tab enable/disable helper
 
     def _apply_tab_states(self, disabled: set) -> None:
         """Re-style all tab buttons to match the given disabled set."""
@@ -1229,16 +1236,14 @@ class TrackerApp(App):
         if self._active_tab in self._disabled_tabs:
             self._show_tab("Cups")
 
-    #  tick ─
+    # tick
 
     def _tick(self, _dt):
         state = _read_state()
-
         connected = state["connected"]
 
-        #  connection state transitions 
+        # connection state transitions
         if connected and not self._was_connected:
-            # Just connected - unlock tabs per slot_data, switch to Cups
             self._was_connected = True
             new_disabled: set[str] = set()
             if not state["include_race_checks"]:
@@ -1249,29 +1254,27 @@ class TrackerApp(App):
             self._show_tab("Cups")
 
         elif not connected and self._was_connected:
-            # Lost connection after being connected - lock all tabs, back to login
             self._was_connected = False
             self._apply_tab_states({"Cups", "Tracks", "Items"})
             self._show_login_panel()
 
         elif not connected and not self._was_connected and AP_SERVER:
-            # Still trying to connect (credentials entered but not yet connected)
-            # Keep login panel showing - nothing to switch
             pass
 
-        #  status bar ─
+        # status bar
         if connected:
             self._dot.color = [0, 0.878, 0.376, 1]
             self._txt.text  = f"Connected — {AP_SLOT} @ {AP_SERVER}"
             self._txt.color = [0.502, 1, 0.690, 1]
         else:
             self._dot.color = list(TEXT_ORANGE)
-            self._txt.text  = (f"Connecting to {AP_SERVER}…" if AP_SERVER else "Enter credentials to connect…")
+            self._txt.text  = (f"Connecting to {AP_SERVER}…"
+                               if AP_SERVER else "Enter credentials to connect…")
             self._txt.color = list(TEXT_DIM)
 
-        completed   = state["completed_locations"]
-        track_locs  = state["track_locations"]
-        unlocked    = set(state["unlocked_items"])
+        completed  = state["completed_locations"]
+        track_locs = state["track_locations"]
+        unlocked   = set(state["unlocked_items"])
 
         for (cup, cc), cell in self.cells.items():
             tier = completed.get(f"{cup}||{cc}", "none")
