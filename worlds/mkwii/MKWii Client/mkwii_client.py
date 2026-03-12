@@ -16,7 +16,7 @@ Vanilla unlock blocking strategy:
 Expected directory layout:
     Archipelago/
         CommonClient.py, NetUtils.py, ...
-        MKWii Client/
+        worlds/mkwii/MKWii Client/
             mkwii_client.py     (this file)
             dolphin_memory.py
             dolphin_manager.py
@@ -46,7 +46,7 @@ from pathlib import Path
 from typing import Dict, Optional, Set, Tuple
 
 # Resolve imports from parent Archipelago directory
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../.."))
 
 from CommonClient import (
     ClientCommandProcessor, CommonContext, get_base_parser, gui_enabled, logger, server_loop,
@@ -672,10 +672,10 @@ class MKWiiContext(CommonContext):
         if self.goal_reached or not self.slot_data:
             return
 
-        required  = self.slot_data.get("cups_required_for_goal", 6)
-        goal_cc   = CC_NAMES[self.slot_data.get("goal_cc", 2)]
-        goal_tier = TIER_HIERARCHY[min(self.slot_data.get("goal_difficulty", 3), len(TIER_HIERARCHY) - 1)]
-        goal_idx  = TIER_HIERARCHY.index(goal_tier)
+        required   = self.slot_data.get("cups_required_for_goal", 6)
+        goal_cc    = CC_NAMES[self.slot_data.get("goal_cc", 2)]
+        goal_tier  = TIER_HIERARCHY[min(self.slot_data.get("goal_difficulty", 3), len(TIER_HIERARCHY) - 1)]
+        goal_idx   = TIER_HIERARCHY.index(goal_tier)
 
         count = 0
         for cup in CUPS:
@@ -707,6 +707,7 @@ class MKWiiContext(CommonContext):
                         f"{goal_tier.replace('_', ' ')}+ on {goal_cc}")
             await self.send_msgs([{"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}])
 
+
 # Entry point
 
 async def main() -> None:
@@ -718,6 +719,9 @@ async def main() -> None:
 
     if "dolphin_auto_launch" not in mgr.config:
         mgr.show_dolphin_auto_launch_selection()
+
+    if "tracker_auto_launch" not in mgr.config:
+        mgr.show_tracker_auto_launch_selection()
 
     iso_path = None
     if mgr.config.get("dolphin_auto_launch", True):
