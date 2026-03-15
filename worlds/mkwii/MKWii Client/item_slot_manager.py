@@ -121,7 +121,7 @@ TRACK_ID_TO_NAME: Dict[int, str] = {
     0x17: "DS Delfino Square",
     0x12: "GCN Waluigi Stadium",
     0x15: "DS Desert Hills",
-    0x1E: "GBA Bowser Castle 3",
+    0x1E: "GBA Bowser's Castle 3",
     0x1D: "N64 DK's Jungle Parkway",
     0x11: "GCN Mario Circuit",
     0x18: "SNES Mario Circuit 3",
