@@ -25,32 +25,49 @@ def set_rules(world: "MKWiiWorld") -> None:
 
     menu = multiworld.get_region("Menu", player)
 
-    # Non-starting cups require their unlock item to access
-    for cup in CUPS:
-        if cup in starting_cups:
-            continue
-        for cc in enabled_ccs:
-            item_name = f"{cup} {cc}"
-            for entrance in menu.exits:
-                if entrance.name == f"To {cup} {cc}":
-                    entrance.access_rule = lambda state, item=item_name: state.has(item, player)
+    # Mirror mode requires receiving at least one unlockable Mirror cup item. Even the 4 starting cups are inaccessible in Mirror until then.
+    MIRROR_UNLOCK_ITEMS = {
+        "Star Cup Mirror", "Special Cup Mirror",
+        "Leaf Cup Mirror", "Lightning Cup Mirror",
+    }
 
-    # Victory: player must be able to reach enough goal-tier locations
+    # Non-starting cups require their specific cup+CC unlock item
+    for cup in CUPS:
+        for cc in enabled_ccs:
+            entrance_name = f"To {cup} {cc}"
+            for entrance in menu.exits:
+                if entrance.name != entrance_name:
+                    continue
+
+                is_starting = cup in starting_cups
+
+                if cc == "Mirror" and not is_starting:
+                    # Locked Mirror cup: needs both mirror mode and its cup unlock
+                    cup_item = f"{cup} {cc}"
+                    entrance.access_rule = lambda state, ci=cup_item: (
+                        state.has_any(MIRROR_UNLOCK_ITEMS, player)
+                        and state.has(ci, player)
+                    )
+                elif cc == "Mirror" and is_starting:
+                    # Starting cup in Mirror: only needs mirror mode unlocked
+                    entrance.access_rule = lambda state: state.has_any(MIRROR_UNLOCK_ITEMS, player)
+                elif not is_starting:
+                    # Non-mirror locked cup: needs its cup+CC unlock item
+                    cup_item = f"{cup} {cc}"
+                    entrance.access_rule = lambda state, ci=cup_item: state.has(ci, player)
+                # else: starting cup in non-Mirror CC, no rule needed
+
+    # Victory: player must reach enough goal-tier locations
     goal_cc = CC_INDEX[world.options.goal_cc.value]
     goal_difficulty = DIFFICULTY_INDEX[world.options.goal_difficulty.value]
     cups_required = world.options.cups_required_for_goal.value
 
-    # Build a set of goal cups that actually exist in this player's world
-    # (i.e. the goal CC and goal difficulty tier were enabled for this player)
     goal_cups = []
     for cup in CUPS:
-        if goal_difficulty.__contains__("star"):
-            # Captitalize the word star.
-            loc_name = f"{cup} {cc} - {goal_difficulty.replace('_', ' ').title()}"
+        if "star" in goal_difficulty:
+            loc_name = f"{cup} {goal_cc} - {goal_difficulty.replace('_', ' ').title()}"
         else:
-            # Dont cause weird capitalization of 1st/2nd/3rd.
-            loc_name = f"{cup} {cc} - {goal_difficulty.replace('_', ' ')}"
-            
+            loc_name = f"{cup} {goal_cc} - {goal_difficulty.replace('_', ' ')}"
         try:
             multiworld.get_location(loc_name, player)
             goal_cups.append(cup)
@@ -61,10 +78,13 @@ def set_rules(world: "MKWiiWorld") -> None:
         count = 0
         for cup in goal_cups:
             if cup in starting_cups:
-                # Starting cups are always accessible — no unlock item needed
-                count += 1
+                if goal_cc == "Mirror":
+                    # Mirror starting cups still need mirror mode unlocked
+                    if state.has_any(MIRROR_UNLOCK_ITEMS, player):
+                        count += 1
+                else:
+                    count += 1
             elif state.has(f"{cup} {goal_cc}", player):
-                # Locked cups require their specific CC unlock item
                 count += 1
         return count >= cups_required
 
