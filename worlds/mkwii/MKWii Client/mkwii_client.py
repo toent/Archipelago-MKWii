@@ -556,6 +556,14 @@ class MKWiiContext(CommonContext):
             ["3rd_place", "2nd_place", "1st_place", "1_star", "2_star"]
         )
 
+        # The apworld always generates a goal_difficulty location for the goal_cc
+        # even when that tier is not in enabled_cup_check_tiers. Mirror the same
+        # failsafe here so those locations are actually sent as checks.
+        goal_cc_idx = self.slot_data.get("goal_cc", 2)
+        goal_cc_str = CC_NAMES[goal_cc_idx] if isinstance(goal_cc_idx, int) else goal_cc_idx
+        goal_diff_idx = self.slot_data.get("goal_difficulty", 3)
+        goal_tier_str = TIER_HIERARCHY[min(goal_diff_idx, len(TIER_HIERARCHY) - 1)]
+
         new_locations: list[int] = []
 
         for cup_name, cup_id in CUP_TROPHY_IDS.items():
@@ -568,7 +576,12 @@ class MKWiiContext(CommonContext):
                 tiers = self._tiers_from_result(trophy, rank)
 
                 for tier in tiers:
-                    if tier not in enabled_tiers:
+                    # Accept a tier if it is in enabled_cup_check_tiers, OR if it
+                    # is the goal_difficulty tier being checked on the goal_cc.
+                    # The latter covers the apworld failsafe that generates that
+                    # extra location even when it is not in enabled_cup_check_tiers.
+                    is_goal_tier_for_goal_cc = (tier == goal_tier_str and cc == goal_cc_str)
+                    if tier not in enabled_tiers and not is_goal_tier_for_goal_cc:
                         continue
                     if tier.__contains__("star"):
                         # Captitalize the word star.
@@ -677,6 +690,11 @@ class MKWiiContext(CommonContext):
         goal_tier  = TIER_HIERARCHY[min(self.slot_data.get("goal_difficulty", 3), len(TIER_HIERARCHY) - 1)]
         goal_idx   = TIER_HIERARCHY.index(goal_tier)
 
+        enabled_tiers = self.slot_data.get(
+            "enabled_cup_check_tiers",
+            ["3rd_place", "2nd_place", "1st_place", "1_star", "2_star"]
+        )
+
         count = 0
         for cup in CUPS:
             achieved = self.completed_locations.get((cup, goal_cc), "none")
@@ -685,16 +703,23 @@ class MKWiiContext(CommonContext):
             if achieved_idx < goal_idx:
                 continue
 
-            # All tiers below goal_tier must also be present in checked_locations
+            # Only require lower tiers that were both enabled in enabled_cup_check_tiers
+            # and actually generated as locations in this seed. Tiers disabled by the
+            # player or absent from location_name_to_id are skipped rather than treated
+            # as missing progression.
             valid_progression = True
             for lower_idx in range(goal_idx):
                 lower_tier = TIER_HIERARCHY[lower_idx]
+                if lower_tier not in enabled_tiers:
+                    continue
                 if lower_tier.__contains__("star"):
                     loc_name = f"{cup} {goal_cc} - {lower_tier.replace('_', ' ').title()}"
                 else:
                     loc_name = f"{cup} {goal_cc} - {lower_tier.replace('_', ' ')}"
                 loc_id = self.location_name_to_id.get(loc_name)
-                if not loc_id or loc_id not in self.checked_locations:
+                if not loc_id:
+                    continue
+                if loc_id not in self.checked_locations:
                     valid_progression = False
                     break
 
