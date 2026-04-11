@@ -13,6 +13,16 @@ Vanilla unlock blocking strategy:
     memory stabilize before scanning again.
   - The initial connection always loads the clean savestate for a fresh start.
 
+Cup locking strategy:
+  - All 8 cups are lockable per-CC. Two starting cups are pre-granted by
+    the seed (one per lowest enabled CC).
+  - Cups with save-file bits (Star, Special, Leaf, Lightning) are locked
+    via the existing bit-clear mechanism.
+  - Base cups (Mushroom, Flower, Shell, Banana) have no save bits and are
+    blocked by overwriting the RaceConfig cup/course fields when a locked
+    cup is selected. The player gets redirected to an unlocked cup in the
+    same CC, or if none are available, the race starts but laps are frozen.
+
 Expected directory layout:
     Archipelago/
         CommonClient.py, NetUtils.py, ...
@@ -56,6 +66,7 @@ from NetUtils import ClientStatus
 from dolphin_memory import (
     CHARACTER_IDS, VEHICLE_IDS, CUP_UNLOCK_IDS, MODE_IDS, ALL_UNLOCK_IDS,
     CUP_TROPHY_IDS, DolphinMemoryManager, get_vehicle_alternates,
+    CUP_NAME_TO_ID, CUP_ID_TO_NAME, BASE_CUP_NAMES, TRACK_TO_CUP,
 )
 from item_slot_manager import ItemSlotManager, AP_TO_GAME
 from tracker import launch_tracker
@@ -146,6 +157,7 @@ class MKWiiContext(CommonContext):
         self.dolphin_mgr: Optional[DolphinManager] = None
 
         # AP-granted state
+        # unlocked_cups stores "{Cup Name} {cc}" strings, e.g. "Mushroom Cup 50cc"
         self.unlocked_cups: Set[str] = set()
         self.unlocked_characters: Set[str] = set()
         self.unlocked_karts: Set[str] = set()
@@ -171,8 +183,25 @@ class MKWiiContext(CommonContext):
         # True while a load is in progress - poll loop must not interfere
         self._loading_state: bool = False
 
+        # Cup lock race-level state
+        self._race_on_locked_cup: bool = False
+        self._prev_in_race: bool = False
+
         # Item slot manager (created once room_id / seed is known)
         self._item_slot_mgr: Optional[ItemSlotManager] = None
+
+    def _is_cup_unlocked_for_cc(self, cup_name: str, cc: str) -> bool:
+        """Check if a specific cup is unlocked for a specific CC."""
+        return f"{cup_name} {cc}" in self.unlocked_cups
+
+    def _find_redirect_cup(self, cc: str) -> Optional[int]:
+        """Find an unlocked cup in the given CC to redirect to.
+        Returns the cup ID or None if no cups are unlocked for this CC.
+        """
+        for cup_name in CUPS:
+            if self._is_cup_unlocked_for_cc(cup_name, cc):
+                return CUP_NAME_TO_ID[cup_name]
+        return None
 
     async def server_auth(self, password_requested: bool = False) -> None:
         if password_requested and not self.password:
@@ -188,6 +217,14 @@ class MKWiiContext(CommonContext):
         elif cmd == "Connected":
             self.slot_data = args.get("slot_data", {})
             console_logger.info(f"Slot data keys: {list(self.slot_data.keys())}")
+
+            # Load starting cups from slot_data and pre-populate unlocked_cups
+            starting_cups = self.slot_data.get("starting_cups", {})
+            for cup_name, cc in starting_cups.items():
+                item_name = f"{cup_name} {cc}"
+                self.unlocked_cups.add(item_name)
+                console_logger.info(f"Starting cup: {item_name}")
+                _report_handler(f"INFO: Starting cup: {item_name}", self.dolphin_mgr)
 
             self._build_location_lookup()
             self._populate_tracker_from_checked()
@@ -210,11 +247,11 @@ class MKWiiContext(CommonContext):
             self._resync_item_slot_pool()
             asyncio.create_task(self._item_slot_mgr.run_inject_loop())
             console_logger.info(
-                f"[ItemSlot] Manager ready — pool: {len(self._item_slot_mgr.unlocked_items)} items, "
+                f"[ItemSlot] Manager ready, pool: {len(self._item_slot_mgr.unlocked_items)} items, "
                 f"mode: {random_mode}"
             )
             _report_handler(
-                f"INFO: [ItemSlot] Manager ready — pool: {len(self._item_slot_mgr.unlocked_items)} items, "
+                f"INFO: [ItemSlot] Manager ready, pool: {len(self._item_slot_mgr.unlocked_items)} items, "
                 f"mode: {random_mode}", self.dolphin_mgr
             )
 
@@ -255,7 +292,13 @@ class MKWiiContext(CommonContext):
 
         elif "Cup" in item_name and ("cc" in item_name.lower() or "mirror" in item_name.lower()):
             self.unlocked_cups.add(item_name)
-            self._apply_unlock(item_name, "cup")
+            # Only write save bits for cups that have them (Star, Special, Leaf, Lightning)
+            if item_name in CUP_UNLOCK_IDS:
+                self._apply_unlock(item_name, "cup")
+            else:
+                # Base cup (Mushroom, Flower, Shell, Banana): no save bit to write,
+                # just log the unlock. Enforcement is via RaceConfig redirect.
+                logger.info(f"Unlocked cup (no save bit): {item_name}")
             if "mirror" in item_name.lower():
                 self.unlocked_modes.add("Mirror mode")
                 if self.dolphin and self.dolphin.is_connected:
@@ -312,6 +355,7 @@ class MKWiiContext(CommonContext):
                 count += 1
 
         for cup in self.unlocked_cups:
+            # Only write save bits for cups that have them
             if cup in CUP_UNLOCK_IDS:
                 self.dolphin.unlock_item(cup)
                 count += 1
@@ -448,6 +492,7 @@ class MKWiiContext(CommonContext):
 
                 await self.dolphin.async_patch_vanilla_unlock_block()
                 await self._block_vanilla_unlocks()
+                self._enforce_cup_locks()
                 await self.check_locations()
 
                 # Item slot injection + race check
@@ -509,6 +554,84 @@ class MKWiiContext(CommonContext):
         except Exception as e:
             console_logger.error(f"Error in vanilla unlock blocking: {e}")
             _report_handler(f"ERROR: Error in vanilla unlock blocking: {e}", self.dolphin_mgr)
+
+    # Cup lock enforcement (RaceConfig redirect + race-level lap freeze)
+
+    def _enforce_cup_locks(self) -> None:
+        """Check the selected cup in RaceConfig and redirect if locked.
+        Also freezes P1's lap counter if a race is running on a locked cup.
+
+        Layer 1 (Menu): When a locked cup is selected on the OK screen,
+        overwrite the RaceConfig cup/course fields to redirect to an
+        unlocked cup in the same CC.
+
+        Layer 2 (Race): If no unlocked cup exists for the CC (redirect
+        impossible), the race starts but P1's lap counter is frozen at 0
+        to prevent completion.
+        """
+        if not self.dolphin or not self.dolphin.is_connected:
+            return
+
+        try:
+            # Layer 1: Menu-level redirect
+            selected_cup_id = self.dolphin.read_selected_cup()
+            if 0 <= selected_cup_id <= 7:
+                selected_cup_name = CUP_ID_TO_NAME.get(selected_cup_id)
+                cc = self.dolphin.read_selected_cc()
+
+                if selected_cup_name and cc:
+                    cup_cc_key = f"{selected_cup_name} {cc}"
+
+                    if cup_cc_key not in self.unlocked_cups:
+                        # Locked cup selected, try to redirect
+                        redirect_id = self._find_redirect_cup(cc)
+                        if redirect_id is not None:
+                            if self.dolphin.redirect_cup(redirect_id):
+                                redirect_name = CUP_ID_TO_NAME.get(redirect_id, "?")
+                                console_logger.info(
+                                    f"Cup redirect: {selected_cup_name} {cc} -> {redirect_name} {cc}"
+                                )
+                                _report_handler(
+                                    f"INFO: Cup redirect: {selected_cup_name} {cc} -> {redirect_name} {cc}",
+                                    self.dolphin_mgr
+                                )
+
+            # Layer 2: Race-level lap freeze
+            in_race, race_mgr = self.dolphin.is_in_race()
+
+            if in_race and not self._prev_in_race:
+                # Race just started, check if it's on a locked cup
+                track_id = self.dolphin.read_race_track_id()
+                track_cup_id = TRACK_TO_CUP.get(track_id, -1)
+                track_cup_name = CUP_ID_TO_NAME.get(track_cup_id)
+                cc = self.dolphin.read_selected_cc()
+
+                if track_cup_name and cc:
+                    cup_cc_key = f"{track_cup_name} {cc}"
+                    if cup_cc_key not in self.unlocked_cups:
+                        self._race_on_locked_cup = True
+                        console_logger.info(
+                            f"Race on locked cup: {track_cup_name} {cc}, freezing laps"
+                        )
+                        _report_handler(
+                            f"INFO: Race on locked cup: {track_cup_name} {cc}, freezing laps",
+                            self.dolphin_mgr
+                        )
+                    else:
+                        self._race_on_locked_cup = False
+                else:
+                    self._race_on_locked_cup = False
+
+            if in_race and self._race_on_locked_cup:
+                self.dolphin.freeze_p1_lap(race_mgr)
+
+            if not in_race and self._prev_in_race:
+                self._race_on_locked_cup = False
+
+            self._prev_in_race = in_race
+
+        except Exception as e:
+            console_logger.debug(f"Cup lock enforcement error: {e}")
 
     # Location checking
 
