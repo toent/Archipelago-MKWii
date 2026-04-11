@@ -876,29 +876,11 @@ async def main() -> None:
 
     mgr = DolphinManager()
 
-    if "dolphin_auto_launch" not in mgr.config:
-        mgr.show_dolphin_auto_launch_selection()
-
     if "tracker_auto_launch" not in mgr.config:
         mgr.show_tracker_auto_launch_selection()
 
-    iso_path = None
-    if mgr.config.get("dolphin_auto_launch", True):
-        iso_path = mgr.config.get("iso_path")
-        if not iso_path or not os.path.exists(iso_path):
-            setup = mgr.run_setup()
-            if not setup["ready"]:
-                return
-            iso_path = setup["iso_path"]
-        else:
-            print(f"  ISO: {os.path.basename(iso_path)}")
-
     if not mgr.show_backup_reminder():
         return
-
-    if mgr.config.get("dolphin_auto_launch", True) and not mgr.is_dolphin_running() and iso_path:
-        mgr.launch_dolphin(iso_path)
-        mgr.focus_game_window()
 
     mgr.show_main_menu_reminder()
 
