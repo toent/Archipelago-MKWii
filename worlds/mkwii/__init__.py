@@ -1,14 +1,20 @@
 """
 Archipelago World definition for Mario Kart Wii (PAL)
+
+Starting cups: Two cups are randomly chosen during generation.
+  - One is assigned to the lowest enabled CC (typically 50cc)
+  - The other to the second lowest (typically 100cc)
+  - This forces the player to use both karts and bikes early on
+  - All other cup/CC combinations are locked and received as AP items
 """
 import typing
-from random import choices
+from random import choices, sample
 
 from BaseClasses import ItemClassification, Tutorial
 from worlds.AutoWorld import WebWorld, World
 
 from .items import (
-    MKWiiItem, ItemData, item_table,
+    MKWiiItem, ItemData, item_table, ALL_CUPS,
     CUP_CC_ITEMS, MODE_ITEMS, CHARACTER_ITEMS, KART_ITEMS, BIKE_ITEMS,
     POWERUP_ITEMS, TRAP_ITEMS, FILLER_ITEMS,
 )
@@ -44,7 +50,6 @@ class MKWiiWorld(World):
     topology_present = False
     web = MKWiiWeb()
 
-    # Event items (code=None) must be excluded from ID maps.
     item_name_to_id = {name: data.code for name, data in item_table.items() if data.code is not None}
     location_name_to_id = {name: data.code for name, data in location_table.items() if data.code is not None}
 
@@ -54,12 +59,7 @@ class MKWiiWorld(World):
         "Bowser", "Donkey Kong", "Wario", "Waluigi", "Baby Mario", "Baby Peach",
     ]
 
-    # Cups that are always accessible regardless of CC (no unlock bit).
-    STARTING_CUPS: typing.ClassVar[typing.List[str]] = [
-        "Mushroom Cup", "Flower Cup", "Shell Cup", "Banana Cup",
-    ]
-
-    # Vehicles without save file bits — always available from a fresh save.
+    # Vehicles without save file bits.
     STARTING_KARTS: typing.ClassVar[typing.List[str]] = [
         "Standard Kart S", "Standard Kart M", "Standard Kart L",
         "Baby Booster", "Nostalgia 1", "Concerto",
@@ -70,21 +70,48 @@ class MKWiiWorld(World):
         "Bullet Bike", "Nanobike", "Bon Bon",
         "Mach Bike", "Bowser Bike",
     ]
+
+    # Per-instance starting cups, set during create_items
+    starting_cups: typing.Dict[str, str]  # {"cup_name": "cc"}
+
     def create_regions(self) -> None:
         create_regions(self)
+
+    def _pick_starting_cups(self) -> typing.Dict[str, str]:
+        """Pick 2 random starting cups and assign them to the two lowest enabled CCs.
+
+        Returns a dict mapping cup name to its starting CC, e.g.:
+          {"Shell Cup": "50cc", "Star Cup": "100cc"}
+
+        If only one CC is enabled, both cups get that CC.
+        """
+        cc_priority = ["50cc", "100cc", "150cc", "Mirror"]
+        enabled = [cc for cc in cc_priority if cc in self.options.enabled_ccs.value]
+
+        if not enabled:
+            enabled = ["50cc"]
+
+        # Pick the two lowest CCs (or the same CC twice if only one enabled)
+        cc_1 = enabled[0]
+        cc_2 = enabled[1] if len(enabled) >= 2 else enabled[0]
+
+        # Pick 2 random cups from all 8
+        picked = self.random.sample(ALL_CUPS, 2)
+
+        return {picked[0]: cc_1, picked[1]: cc_2}
 
     def create_items(self) -> None:
         item_pool: typing.List[MKWiiItem] = []
 
-        # Cup unlocks (only non-starting cups have save bits)
-        all_cups = [
-            "Mushroom Cup", "Flower Cup", "Star Cup", "Special Cup",
-            "Shell Cup", "Banana Cup", "Leaf Cup", "Lightning Cup",
-        ]
-        for cup in all_cups:
-            if cup in self.STARTING_CUPS:
-                continue
+        # Pick starting cups for this seed
+        self.starting_cups = self._pick_starting_cups()
+
+        # Cup unlocks: all cups for all enabled CCs, except the starting cup/CC pairs
+        for cup in ALL_CUPS:
             for cc in self.options.enabled_ccs.value:
+                # Skip if this exact cup+CC is a starting pair
+                if self.starting_cups.get(cup) == cc:
+                    continue
                 item_name = f"{cup} {cc}"
                 if item_name in item_table:
                     item_pool.append(self.create_item(item_name))
@@ -109,9 +136,8 @@ class MKWiiWorld(World):
         needed_items = total_locations - len(item_pool)
 
         if self.options.enable_item_randomization.value:
-            starting = self.options.starting_items.value  # set of bare game names
+            starting = self.options.starting_items.value
             for name in POWERUP_ITEMS:
-                # Strip "Powerup: " prefix to get the bare game name for comparison
                 game_name = name.replace("Powerup: ", "", 1)
                 if game_name not in starting:
                     item_pool.append(self.create_item(name))
@@ -132,7 +158,6 @@ class MKWiiWorld(World):
             for _ in range(needed_items):
                 item_pool.append(self.create_filler())
         else:
-            # Item randomization disabled — fill with inert filler only
             for _ in range(needed_items):
                 item_pool.append(self.create_item("Filler: Random Item"))
 
@@ -185,7 +210,7 @@ class MKWiiWorld(World):
             "goal_difficulty": self.options.goal_difficulty.value,
             "goal_cc": self.options.goal_cc.value,
             "starting_characters": self.STARTING_CHARACTERS,
-            "starting_cups": self.STARTING_CUPS,
+            "starting_cups": self.starting_cups,
             "starting_karts": self.STARTING_KARTS,
             "starting_bikes": self.STARTING_BIKES,
         }

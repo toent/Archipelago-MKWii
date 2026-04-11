@@ -12,7 +12,19 @@ Memory layout (PAL):
 Unlock flags are dual-written to both the runtime structure (instant in-game
 effect) and the rksys buffer (persists when the game auto-saves).
 
+RaceConfig cup locking (PAL):
+    RaceConfig pointer:     0x809BD728 (points to MEM2)
+    Selected cup:           RaceConfig + 0x177B (u8, cup ID 0-7)
+    Selected course:        RaceConfig + 0x175B (u8, track ID)
+    CC setting:             RaceConfig + 0x175F (u8, 0=50cc 1=100cc 2=150cc)
+    Mirror flag:            RaceConfig + 0x1783 (u8, 1=mirror)
+
+Base cups (Mushroom, Flower, Shell, Banana) have no save-file unlock bits.
+They are blocked at runtime by overwriting the RaceConfig cup/course fields
+to redirect the player to an unlocked cup.
+
 All bit offsets verified against 25 progressive PAL save snapshots.
+RaceConfig offsets verified via memory snapshot diffing.
 """
 import logging
 import struct
@@ -50,6 +62,53 @@ GP_CC_OFFSETS: Dict[str, int] = {
     "Mirror": 0x900,
 }
 
+# RaceConfig addresses (for cup locking)
+RACE_CONFIG_PTR     = 0x809BD728
+RACECONFIG_CUP_OFFSET    = 0x177B  # u8: selected cup ID (0-7)
+RACECONFIG_COURSE_OFFSET = 0x175B  # u8: selected track ID
+RACECONFIG_CC_OFFSET     = 0x175F  # u8: 0=50cc, 1=100cc, 2=150cc
+RACECONFIG_MIRROR_OFFSET = 0x1783  # u8: 1=mirror
+
+# Cup ID to name mapping
+CUP_ID_TO_NAME: Dict[int, str] = {
+    0: "Mushroom Cup", 1: "Flower Cup", 2: "Star Cup", 3: "Special Cup",
+    4: "Shell Cup", 5: "Banana Cup", 6: "Leaf Cup", 7: "Lightning Cup",
+}
+
+CUP_NAME_TO_ID: Dict[str, int] = {v: k for k, v in CUP_ID_TO_NAME.items()}
+
+# First track ID for each cup (used when redirecting to an unlocked cup)
+CUP_FIRST_TRACK: Dict[int, int] = {
+    0: 0x08,  # Mushroom -> Luigi Circuit
+    1: 0x00,  # Flower -> Mario Circuit
+    2: 0x09,  # Star -> Daisy Circuit
+    3: 0x0E,  # Special -> Dry Dry Ruins
+    4: 0x10,  # Shell -> GCN Peach Beach
+    5: 0x1B,  # Banana -> N64 Sherbet Land
+    6: 0x15,  # Leaf -> DS Desert Hills
+    7: 0x18,  # Lightning -> SNES Mario Circuit 3
+}
+
+# Track ID to cup ID mapping (for race-level fallback detection)
+TRACK_TO_CUP: Dict[int, int] = {
+    # Mushroom Cup (0)
+    0x08: 0, 0x01: 0, 0x02: 0, 0x04: 0,
+    # Flower Cup (1)
+    0x00: 1, 0x05: 1, 0x06: 1, 0x07: 1,
+    # Star Cup (2)
+    0x09: 2, 0x0F: 2, 0x0B: 2, 0x03: 2,
+    # Special Cup (3)
+    0x0E: 3, 0x0A: 3, 0x0C: 3, 0x0D: 3,
+    # Shell Cup (4)
+    0x10: 4, 0x14: 4, 0x19: 4, 0x1A: 4,
+    # Banana Cup (5)
+    0x1B: 5, 0x1F: 5, 0x17: 5, 0x12: 5,
+    # Leaf Cup (6)
+    0x15: 6, 0x1E: 6, 0x1D: 6, 0x11: 6,
+    # Lightning Cup (7)
+    0x18: 7, 0x16: 7, 0x13: 7, 0x1C: 7,
+}
+
 # Unlock bit tables
 # Each entry: (absolute_offset_from_license_start, bit_index)
 CHARACTER_IDS: Dict[str, Optional[Tuple[int, int]]] = {
@@ -72,40 +131,31 @@ CHARACTER_IDS: Dict[str, Optional[Tuple[int, int]]] = {
 VEHICLE_IDS: Dict[str, Optional[Tuple[int, int]]] = {
     # Unlockable karts (PAL primary name first, US alias follows)
     "Turbo Blooper":   (0x003F, 5),
-    # "Super Blooper":   (0x003F, 5),   # US alias
     "Cheep Charger":   (0x003F, 2),
     "Royal Racer":     (0x003F, 6),
-    # "Daytripper":      (0x003F, 6),   # US alias
     "Blue Falcon":     (0x003F, 4),
     "Rally Romper":    (0x003F, 3),
-    # "Tiny Titan":      (0x003F, 3),   # US alias
     "B. Dasher Mk 2":  (0x003F, 7),
     "B Dasher Mk 2":   (0x003F, 7),
-    # "Sprinter":        (0x003F, 7),   # US alias
     "Dragonetti":      (0x003E, 2),
-    # "Honeycoupe":      (0x003E, 2),   # US alias
     "Aero Glider":     (0x003E, 1),
-    # "Jetsetter":       (0x003E, 1),   # US alias
     "Piranha Prowler": (0x003E, 0),
     # Unlockable bikes
     "Magicruiser":     (0x003E, 4),
-    # "Magikruiser":     (0x003E, 4),   # US alias
     "Twinkle Star":    (0x003D, 1),
-    # "Shooting Star":   (0x003D, 1),   # US alias
     "Rapide":          (0x003E, 6),
-    # "Zip Zip":         (0x003E, 6),   # US alias
     "Nitrocycle":      (0x003E, 7),
-    # "Sneakster":       (0x003E, 7),   # US alias
     "Quacker":         (0x003E, 3),
     "Dolphin Dasher":  (0x003D, 0),
     "Bubble Bike":     (0x003E, 5),
-    # "Jet Bubble":      (0x003E, 5),   # US alias
     "Phantom":         (0x003D, 3),
     "Torpedo":         (0x003D, 2),
-    # "Spear":           (0x003D, 2),   # US alias
 }
 
 CUP_UNLOCK_IDS: Dict[str, Tuple[int, int]] = {
+    # Save-file unlock bits (Star, Special, Leaf, Lightning only)
+    # Base cups (Mushroom, Flower, Shell, Banana) have NO save bits
+    # and are blocked via RaceConfig redirect instead.
     # 50cc
     "Star Cup 50cc":       (0x003A, 6),
     "Special Cup 50cc":    (0x0039, 2),
@@ -127,6 +177,9 @@ CUP_UNLOCK_IDS: Dict[str, Tuple[int, int]] = {
     "Leaf Cup Mirror":     (0x0038, 1),
     "Lightning Cup Mirror": (0x0038, 5),
 }
+
+# Base cup item names (no save bits, blocked via RaceConfig)
+BASE_CUP_NAMES = {"Mushroom Cup", "Flower Cup", "Shell Cup", "Banana Cup"}
 
 MODE_IDS: Dict[str, Tuple[int, int]] = {
     "50cc Karts/Bikes":  (0x0038, 6),
@@ -274,13 +327,13 @@ class DolphinMemoryManager:
             return False
 
         mgr_ptr = struct.unpack(">I", raw)[0]
-        await asyncio.sleep(0.1)  # 0.1s delay in code
+        await asyncio.sleep(0.1)
         if mgr_ptr < 0x80000000:
             logger.warning("Waiting for game to load past title screen...")
             _report_handler("WARNING: Waiting for game to load past title screen...", self.mgr)
             return False
 
-        await asyncio.sleep(0.1)  # 0.1s delay in code
+        await asyncio.sleep(0.1)
  
         # Resolve save buffer pointer and verify RKSD magic
         try:
@@ -291,14 +344,14 @@ class DolphinMemoryManager:
             return False
 
         save_ptr = struct.unpack(">I", save_ptr_raw)[0]
-        await asyncio.sleep(0.1)  # 0.1s delay in code
+        await asyncio.sleep(0.1)
         
         if save_ptr < 0x80000000:
             logger.warning(f"Save system loading: {save_ptr}")
             _report_handler(f"WARNING: Save system loading: {save_ptr}", self.mgr)
             return False
 
-        await asyncio.sleep(0.1)  # 0.1s delay in code
+        await asyncio.sleep(0.1)
 
         try:
             magic = dme.read_bytes(save_ptr, 4)
@@ -307,10 +360,9 @@ class DolphinMemoryManager:
             _report_handler(f"WARNING: Save buffer not ready: {e}", self.mgr)
             return False
         
-        await asyncio.sleep(0.1)  # 0.1s delay in code
+        await asyncio.sleep(0.1)
 
         if magic != b"RKSD":
-            #self._warn_once("magic", f"Save buffer initializing (magic: {magic.hex()})...")
             logger.warning(f"Save buffer initializing (magic: {magic.hex()})...")
             _report_handler(f"WARNING: Save buffer initializing (magic: {magic.hex()})...", self.mgr)
             return False
@@ -460,6 +512,98 @@ class DolphinMemoryManager:
             _report_handler(f"ERROR: Error reading GP result for cup {cup_id} {cc}: {e}", self.mgr)
             return ("none", "D")
 
+    # RaceConfig cup reading/writing (for base cup locking)
+
+    def _read_rc_base(self) -> int:
+        """Read the RaceConfig base pointer. Returns 0 on failure."""
+        try:
+            return struct.unpack(">I", dme.read_bytes(RACE_CONFIG_PTR, 4))[0]
+        except Exception:
+            return 0
+
+    def read_selected_cup(self) -> int:
+        """Read the currently selected cup ID from RaceConfig. Returns -1 on failure."""
+        try:
+            base = self._read_rc_base()
+            if base == 0:
+                return -1
+            return struct.unpack(">B", dme.read_bytes(base + RACECONFIG_CUP_OFFSET, 1))[0]
+        except Exception:
+            return -1
+
+    def read_selected_cc(self) -> Optional[str]:
+        """Read the current CC from RaceConfig."""
+        try:
+            base = self._read_rc_base()
+            if base == 0:
+                return None
+            mirror = struct.unpack(">B", dme.read_bytes(base + RACECONFIG_MIRROR_OFFSET, 1))[0]
+            if mirror == 1:
+                return "Mirror"
+            cc_byte = struct.unpack(">B", dme.read_bytes(base + RACECONFIG_CC_OFFSET, 1))[0]
+            return {0: "50cc", 1: "100cc", 2: "150cc"}.get(cc_byte)
+        except Exception:
+            return None
+
+    def redirect_cup(self, target_cup_id: int) -> bool:
+        """Overwrite the selected cup and course in RaceConfig to redirect
+        the player to a different cup. Used to block locked base cups.
+
+        Returns True if the write succeeded.
+        """
+        try:
+            base = self._read_rc_base()
+            if base == 0:
+                return False
+            target_track = CUP_FIRST_TRACK.get(target_cup_id)
+            if target_track is None:
+                return False
+            dme.write_bytes(base + RACECONFIG_CUP_OFFSET, struct.pack(">B", target_cup_id))
+            dme.write_bytes(base + RACECONFIG_COURSE_OFFSET, struct.pack(">B", target_track))
+            return True
+        except Exception:
+            return False
+
+    # Race-level detection and lap freeze (fallback for cup locking)
+
+    _RACE_MGR_PTR_ADDR   = 0x809BD730
+    _PLAYER_ARRAY_OFFSET = 0xAC
+    _TRACK_ID_ADDR       = 0x809C26B3
+    _LAP_OFFSET          = 0x25
+
+    def is_in_race(self) -> Tuple[bool, int]:
+        """Check if we're currently in a race.
+        Returns (in_race, race_mgr_ptr).
+        """
+        try:
+            race_mgr = struct.unpack(">I", dme.read_bytes(self._RACE_MGR_PTR_ADDR, 4))[0]
+            if 0x80000000 <= race_mgr <= 0x817FFFFF:
+                return True, race_mgr
+            return False, 0
+        except Exception:
+            return False, 0
+
+    def read_race_track_id(self) -> int:
+        """Read the current track ID during a race. Returns -1 on failure."""
+        try:
+            return struct.unpack(">B", dme.read_bytes(self._TRACK_ID_ADDR, 1))[0]
+        except Exception:
+            return -1
+
+    def freeze_p1_lap(self, race_mgr: int) -> bool:
+        """Zero P1's lap counter to prevent race completion.
+        Returns True if the write succeeded.
+        """
+        try:
+            player_array = race_mgr + self._PLAYER_ARRAY_OFFSET
+            player_ptr = struct.unpack(">I", dme.read_bytes(player_array, 4))[0]
+            if 0x80000000 <= player_ptr <= 0x817FFFFF:
+                dme.write_bytes(player_ptr + self._LAP_OFFSET, struct.pack(">B", 0))
+                return True
+            return False
+        except Exception:
+            return False
+
     # Vanilla unlock block patch
 
     # Primary:   write li r3, -1 + blr (0x3860FFFF 4E800020) to 0x80854FA4
@@ -496,11 +640,11 @@ class DolphinMemoryManager:
         except Exception as e:
             logger.warning(
                 f"Primary patch failed at 0x{self._PATCH_PRIMARY_ADDR:08X}: {e} "
-                f"— trying fallback..."
+                f", trying fallback..."
             )
             _report_handler(
                 f"WARNING: Primary patch failed at 0x{self._PATCH_PRIMARY_ADDR:08X}: {e} "
-                f"— trying fallback...", self.mgr
+                f", trying fallback...", self.mgr
             )
 
         # Fallback patch
