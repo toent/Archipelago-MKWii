@@ -934,17 +934,32 @@ class TrackerApp(App):
                                    font_size=FS_H1, bold=True,
                                    size_hint_y=0.55, halign="left"))
 
-        status_row = BoxLayout(orientation="horizontal",
-                               spacing=int(dp(3)), size_hint_y=0.45)
+        status_row = FloatLayout(size_hint_y=0.45)
         _paint_bg(status_row, BG_CARD)
         self._dot = Label(text="•", color=list(TEXT_ORANGE), font_size=FS_H1,
-                          size_hint=(None, 1), width=DOT_W)
-        self._txt = _label(
-            "Enter credentials to connect…" if _STANDALONE_MODE
+                          size_hint=(None, None), size=(DOT_W, TOP_BAR_H),
+                          pos_hint={"x": 0, "center_y": 0.5})
+        self._txt = Label(
+            text="Enter credentials to connect…" if _STANDALONE_MODE
             else f"Connecting to {AP_SERVER}…",
-            TEXT_DIM, font_size=FS_H3, halign="left", size_hint=(1, 1))
+            color=list(TEXT_DIM), font_size=FS_H3,
+            halign="left", valign="middle",
+            size_hint=(None, None),
+            pos_hint={"center_y": 0.5})
+        self._txt.bind(texture_size=self._on_status_text_resize)
+
+        # Eye toggle for showing/hiding server IP
+        self._show_connection_details = False
+        self._eye_btn = Label(
+            text="👁‍🗨", font_name=_EMOJI_FONT,
+            font_size=FS_H3, color=list(TEXT_DIM),
+            size_hint=(None, None), size=(int(dp(24)), TOP_BAR_H),
+            pos_hint={"center_y": 0.5})
+        self._eye_btn.bind(on_touch_down=self._on_eye_toggle)
+
         status_row.add_widget(self._dot)
         status_row.add_widget(self._txt)
+        status_row.add_widget(self._eye_btn)
         info_col.add_widget(status_row)
         top_bar.add_widget(info_col)
 
@@ -987,6 +1002,26 @@ class TrackerApp(App):
 
         Clock.schedule_interval(self._tick, 0.5)
         return root
+
+    # eye toggle for connection details
+
+    def _on_status_text_resize(self, inst, texture_size):
+        """Reposition the text label and eye button when text content changes."""
+        tw, th = texture_size
+        inst.size = (tw, th)
+        inst.text_size = (None, None)
+        inst.x = self._dot.right + int(dp(3))
+        self._eye_btn.x = inst.right + int(dp(4))
+
+    def _on_eye_toggle(self, widget, touch):
+        if widget.collide_point(*touch.pos):
+            self._show_connection_details = not self._show_connection_details
+            if self._show_connection_details:
+                self._eye_btn.text = "👁"
+                self._eye_btn.color = list(TEXT_WHITE)
+            else:
+                self._eye_btn.text = "👁‍🗨"
+                self._eye_btn.color = list(TEXT_DIM)
 
     # login panel (standalone mode)
 
@@ -1291,12 +1326,21 @@ class TrackerApp(App):
         # status bar
         if connected:
             self._dot.color = [0, 0.878, 0.376, 1]
-            self._txt.text  = f"Connected — {AP_SLOT} @ {AP_SERVER}"
+            if self._show_connection_details:
+                self._txt.text = f"Connected, {AP_SLOT} @ {AP_SERVER}"
+            else:
+                hidden_ip = "•" * len(AP_SERVER) if AP_SERVER else "••••••"
+                self._txt.text = f"Connected, {AP_SLOT} @ {hidden_ip}"
             self._txt.color = [0.502, 1, 0.690, 1]
         else:
             self._dot.color = list(TEXT_ORANGE)
-            self._txt.text  = (f"Connecting to {AP_SERVER}…"
-                               if AP_SERVER else "Enter credentials to connect…")
+            if self._show_connection_details and AP_SERVER:
+                self._txt.text = f"Connecting to {AP_SERVER}…"
+            elif AP_SERVER:
+                hidden_ip = "•" * len(AP_SERVER)
+                self._txt.text = f"Connecting to {hidden_ip}…"
+            else:
+                self._txt.text = "Enter credentials to connect…"
             self._txt.color = list(TEXT_DIM)
 
         completed    = state["completed_locations"]
