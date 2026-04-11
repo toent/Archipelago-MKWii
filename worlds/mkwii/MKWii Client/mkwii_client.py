@@ -195,13 +195,49 @@ class MKWiiContext(CommonContext):
         return f"{cup_name} {cc}" in self.unlocked_cups
 
     def _find_redirect_cup(self, cc: str) -> Optional[int]:
-        """Find an unlocked cup in the given CC to redirect to.
+        """Find the best unlocked cup in the given CC to redirect to.
+
+        Prefers cups with the most unchecked locations remaining.
+        Avoids fully completed cups when possible.
         Returns the cup ID or None if no cups are unlocked for this CC.
         """
+        best_cup = None
+        best_remaining = -1
+
         for cup_name in CUPS:
-            if self._is_cup_unlocked_for_cc(cup_name, cc):
-                return CUP_NAME_TO_ID[cup_name]
+            if not self._is_cup_unlocked_for_cc(cup_name, cc):
+                continue
+
+            # Count unchecked locations for this cup+CC
+            remaining = 0
+            for loc_name, loc_id in self.location_name_to_id.items():
+                # Match locations that belong to this cup and CC
+                # Cup tier checks: "{cup} {cc} - {tier}"
+                # Race checks: "{track} {cc} - 1st Place"
+                if not loc_name.startswith(cup_name) and not self._is_track_in_cup(loc_name, cup_name, cc):
+                    continue
+                if f" {cc} - " not in loc_name:
+                    continue
+                if loc_id not in self.checked_locations:
+                    remaining += 1
+
+            if remaining > best_remaining:
+                best_remaining = remaining
+                best_cup = cup_name
+
+        if best_cup is not None:
+            return CUP_NAME_TO_ID[best_cup]
         return None
+
+    @staticmethod
+    def _is_track_in_cup(loc_name: str, cup_name: str, cc: str) -> bool:
+        """Check if a location name is a race check for a track in the given cup."""
+        from worlds.mkwii.locations import TRACKS
+        tracks = TRACKS.get(cup_name, [])
+        for track in tracks:
+            if loc_name.startswith(track) and f" {cc} - " in loc_name:
+                return True
+        return False
 
     async def server_auth(self, password_requested: bool = False) -> None:
         if password_requested and not self.password:
