@@ -1,8 +1,13 @@
 """
 Items for Mario Kart Wii Archipelago World (PAL Version)
 
-Only items with verified save file unlock bits are included.
-Items without save bits are always available and listed as starting items in world.py.
+All 8 cups have per-CC unlock items. Two random starting cups are granted
+during world generation (one for 50cc, one for 100cc). All other cup/CC
+combinations must be received as AP items.
+
+Star/Special/Leaf/Lightning cups also have save-file unlock bits.
+Mushroom/Flower/Shell/Banana cups have no save bits and are blocked
+at runtime via RaceConfig memory overwrites.
 """
 from typing import NamedTuple, Dict
 from BaseClasses import Item
@@ -22,43 +27,59 @@ BASE_ID = 0x4D4B0000  # MKW in hex + offset
 
 
 # Cup/CC unlock items
+# All 8 cups, all 4 CCs. Base cups (Mushroom, Flower, Shell, Banana) are
+# new additions that are blocked via RaceConfig redirect on the client side.
 CUP_CC_ITEMS = {
-    # 50cc cups (except starting cups: Mushroom, Flower, Shell, Banana)
-    "Star Cup 50cc": ItemData(BASE_ID + 0),
-    "Special Cup 50cc": ItemData(BASE_ID + 1),
-    "Leaf Cup 50cc": ItemData(BASE_ID + 3),
-    "Lightning Cup 50cc": ItemData(BASE_ID + 2),
-    
-    # 100cc cups (except starting cups: Mushroom, Flower, Shell, Banana)
-    "Star Cup 100cc": ItemData(BASE_ID + 12),
-    "Special Cup 100cc": ItemData(BASE_ID + 13),
-    "Leaf Cup 100cc": ItemData(BASE_ID + 16),
-    "Lightning Cup 100cc": ItemData(BASE_ID + 17),
-    
-    # 150cc cups (except starting cups: Mushroom, Flower, Shell, Banana)
-    "Star Cup 150cc": ItemData(BASE_ID + 22),
-    "Special Cup 150cc": ItemData(BASE_ID + 23),
-    "Leaf Cup 150cc": ItemData(BASE_ID + 26),
-    "Lightning Cup 150cc": ItemData(BASE_ID + 27),
-    
-    # Mirror cups (except starting cups: Mushroom, Flower, Shell, Banana)
-    "Star Cup Mirror": ItemData(BASE_ID + 32),
-    "Special Cup Mirror": ItemData(BASE_ID + 33),
-    "Leaf Cup Mirror": ItemData(BASE_ID + 36),
-    "Lightning Cup Mirror": ItemData(BASE_ID + 37),
+    # 50cc
+    "Mushroom Cup 50cc":    ItemData(BASE_ID + 4),
+    "Flower Cup 50cc":      ItemData(BASE_ID + 5),
+    "Star Cup 50cc":        ItemData(BASE_ID + 0),
+    "Special Cup 50cc":     ItemData(BASE_ID + 1),
+    "Shell Cup 50cc":       ItemData(BASE_ID + 6),
+    "Banana Cup 50cc":      ItemData(BASE_ID + 7),
+    "Leaf Cup 50cc":        ItemData(BASE_ID + 3),
+    "Lightning Cup 50cc":   ItemData(BASE_ID + 2),
+
+    # 100cc
+    "Mushroom Cup 100cc":    ItemData(BASE_ID + 14),
+    "Flower Cup 100cc":      ItemData(BASE_ID + 15),
+    "Star Cup 100cc":        ItemData(BASE_ID + 12),
+    "Special Cup 100cc":     ItemData(BASE_ID + 13),
+    "Shell Cup 100cc":       ItemData(BASE_ID + 18),
+    "Banana Cup 100cc":      ItemData(BASE_ID + 19),
+    "Leaf Cup 100cc":        ItemData(BASE_ID + 16),
+    "Lightning Cup 100cc":   ItemData(BASE_ID + 17),
+
+    # 150cc
+    "Mushroom Cup 150cc":    ItemData(BASE_ID + 24),
+    "Flower Cup 150cc":      ItemData(BASE_ID + 25),
+    "Star Cup 150cc":        ItemData(BASE_ID + 22),
+    "Special Cup 150cc":     ItemData(BASE_ID + 23),
+    "Shell Cup 150cc":       ItemData(BASE_ID + 28),
+    "Banana Cup 150cc":      ItemData(BASE_ID + 29),
+    "Leaf Cup 150cc":        ItemData(BASE_ID + 26),
+    "Lightning Cup 150cc":   ItemData(BASE_ID + 27),
+
+    # Mirror
+    "Mushroom Cup Mirror":    ItemData(BASE_ID + 34),
+    "Flower Cup Mirror":      ItemData(BASE_ID + 35),
+    "Star Cup Mirror":        ItemData(BASE_ID + 32),
+    "Special Cup Mirror":     ItemData(BASE_ID + 33),
+    "Shell Cup Mirror":       ItemData(BASE_ID + 38),
+    "Banana Cup Mirror":      ItemData(BASE_ID + 39),
+    "Leaf Cup Mirror":        ItemData(BASE_ID + 36),
+    "Lightning Cup Mirror":   ItemData(BASE_ID + 37),
 }
 
 
-# Mode unlock items — verified save file bits at 0x0038
+# Mode unlock items
 MODE_ITEMS = {
     "50cc Karts/Bikes": ItemData(BASE_ID + 40),     # 0x0038 bit 6 (0x40)
     "100cc Karts/Bikes": ItemData(BASE_ID + 41),     # 0x0038 bit 7 (0x80)
 }
 
 
-# Character unlocks — all characters with verified save file bits (PAL)
-# Starting characters (no save bit): Mario, Luigi, Peach, Yoshi, Toad,
-#   Koopa Troopa, Bowser, Donkey Kong, Wario, Waluigi, Baby Mario, Baby Peach
+# Character unlocks
 CHARACTER_ITEMS = {
     "Character: Baby Daisy": ItemData(BASE_ID + 100),
     "Character: Baby Luigi": ItemData(BASE_ID + 101),
@@ -77,39 +98,35 @@ CHARACTER_ITEMS = {
 }
 
 
-# Kart unlocks — only karts with verified save file bits (PAL names)
-# Starting karts (no save bit): Standard Kart S/M/L, Baby Booster,
-#   Nostalgia 1, Concerto, Mini Beast, Offroader, Flame Flyer
+# Kart unlocks
 KART_ITEMS = {
-    "Kart: Turbo Blooper": ItemData(BASE_ID + 200),      # US: Super Blooper
+    "Kart: Turbo Blooper": ItemData(BASE_ID + 200),
     "Kart: Cheep Charger": ItemData(BASE_ID + 201),
-    "Kart: Royal Racer": ItemData(BASE_ID + 202),         # US: Daytripper
+    "Kart: Royal Racer": ItemData(BASE_ID + 202),
     "Kart: Blue Falcon": ItemData(BASE_ID + 203),
-    "Kart: Rally Romper": ItemData(BASE_ID + 204),         # US: Tiny Titan
-    "Kart: B. Dasher Mk 2": ItemData(BASE_ID + 205),      # US: Sprinter
-    "Kart: Dragonetti": ItemData(BASE_ID + 206),           # US: Honeycoupe
-    "Kart: Aero Glider": ItemData(BASE_ID + 207),          # US: Jetsetter
+    "Kart: Rally Romper": ItemData(BASE_ID + 204),
+    "Kart: B. Dasher Mk 2": ItemData(BASE_ID + 205),
+    "Kart: Dragonetti": ItemData(BASE_ID + 206),
+    "Kart: Aero Glider": ItemData(BASE_ID + 207),
     "Kart: Piranha Prowler": ItemData(BASE_ID + 208),
 }
 
 
-# Bike unlocks — only bikes with verified save file bits (PAL names)
-# Starting bikes (no save bit): Standard Bike S/M/L, Bullet Bike,
-#   Nanobike, Bon Bon, Mach Bike, Bowser Bike
+# Bike unlocks
 BIKE_ITEMS = {
-    "Bike: Magicruiser": ItemData(BASE_ID + 300),          # US: Magikruiser
-    "Bike: Twinkle Star": ItemData(BASE_ID + 301),         # US: Shooting Star
-    "Bike: Rapide": ItemData(BASE_ID + 302),               # US: Zip Zip
-    "Bike: Nitrocycle": ItemData(BASE_ID + 303),           # US: Sneakster
+    "Bike: Magicruiser": ItemData(BASE_ID + 300),
+    "Bike: Twinkle Star": ItemData(BASE_ID + 301),
+    "Bike: Rapide": ItemData(BASE_ID + 302),
+    "Bike: Nitrocycle": ItemData(BASE_ID + 303),
     "Bike: Quacker": ItemData(BASE_ID + 304),
     "Bike: Dolphin Dasher": ItemData(BASE_ID + 305),
-    "Bike: Bubble Bike": ItemData(BASE_ID + 306),          # US: Jet Bubble
+    "Bike: Bubble Bike": ItemData(BASE_ID + 306),
     "Bike: Phantom": ItemData(BASE_ID + 307),
-    "Bike: Torpedo": ItemData(BASE_ID + 308),              # US: Spear
+    "Bike: Torpedo": ItemData(BASE_ID + 308),
 }
 
 
-# Powerup unlocks (items that can appear in item boxes)
+# Powerup unlocks
 POWERUP_ITEMS = {
     "Powerup: Red Shell": ItemData(BASE_ID + 400),
     "Powerup: Triple Bananas": ItemData(BASE_ID + 401),
@@ -143,7 +160,7 @@ TRAP_ITEMS = {
 }
 
 
-# Filler items (one-time use items)
+# Filler items
 FILLER_ITEMS = {
     "Filler: Random Item": ItemData(BASE_ID + 600, "filler"),
     "Filler: Mushroom": ItemData(BASE_ID + 601, "filler"),
@@ -164,8 +181,16 @@ FILLER_ITEMS = {
 
 # Special items
 SPECIAL_ITEMS = {
+    "Victory Trophy": ItemData(BASE_ID + 700, "progression"),
     "Victory": ItemData(None, "progression"),
 }
+
+
+# All cups (used by __init__.py for starting cup selection)
+ALL_CUPS = [
+    "Mushroom Cup", "Flower Cup", "Star Cup", "Special Cup",
+    "Shell Cup", "Banana Cup", "Leaf Cup", "Lightning Cup",
+]
 
 
 # Combine all items

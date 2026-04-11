@@ -83,6 +83,8 @@ def _hex4(h):
 
 
 TIER_BG = {
+    "locked":    BG_CELL_EMPTY,
+    "unlocked":  _hex4("#0a1a0a"),
     "none":      BG_CELL_EMPTY,
     "3rd_place": _hex4("#cd7f32"),
     "2nd_place": _hex4("#c0c0c0"),
@@ -92,6 +94,8 @@ TIER_BG = {
     "3_star":    _hex4("#deb900"),
 }
 TIER_FG = {
+    "locked":    TEXT_DIM,
+    "unlocked":  _hex4("#336633"),
     "none":      TEXT_DIM,
     "3rd_place": _hex4("#221100"),
     "2nd_place": _hex4("#4B4B4B"),
@@ -101,6 +105,8 @@ TIER_FG = {
     "3_star":    _hex4("#645000"),
 }
 TIER_SYMBOLS = {
+    "locked":    "",
+    "unlocked":  "🔓",
     "none":      "",
     "3rd_place": "🏆",
     "2nd_place": "🏆",
@@ -305,6 +311,7 @@ _state = {
     "completed_locations":    {},
     "track_locations":        {},
     "unlocked_items":         [],
+    "unlocked_cups":          set(),
     "include_race_checks":    True,
     "enable_item_randomization": True,
 }
@@ -322,6 +329,7 @@ def _read_state() -> dict:
             "completed_locations":     dict(_state["completed_locations"]),
             "track_locations":         dict(_state["track_locations"]),
             "unlocked_items":          list(_state["unlocked_items"]),
+            "unlocked_cups":           set(_state["unlocked_cups"]),
             "include_race_checks":     _state["include_race_checks"],
             "enable_item_randomization": _state["enable_item_randomization"],
         }
@@ -511,6 +519,12 @@ async def _ap_client_loop() -> None:
                 track_locs: dict[str, bool] = {}
                 unlocked_items: list[str] = list(starting_unlocked)
 
+                # Track unlocked cups: starting cups from slot_data
+                starting_cups_data = slot_data.get("starting_cups", {})
+                unlocked_cups: set[str] = set()
+                for cup_name, cc in starting_cups_data.items():
+                    unlocked_cups.add(f"{cup_name} {cc}")
+
                 for loc_id in checked_ids:
                     name = id_to_name.get(loc_id)
                     if not name:
@@ -522,14 +536,20 @@ async def _ap_client_loop() -> None:
                     if m["cmd"] == "ReceivedItems":
                         for net_item in m.get("items", []):
                             iname = item_id_to_name.get(net_item.get("item", -1))
-                            if iname and iname.startswith("Powerup:") and iname not in unlocked_items:
+                            if not iname:
+                                continue
+                            if iname.startswith("Powerup:") and iname not in unlocked_items:
                                 unlocked_items.append(iname)
+                            # Cup unlock items: "{Cup Name} {cc}" e.g. "Mushroom Cup 50cc"
+                            if "Cup" in iname and ("cc" in iname.lower() or "mirror" in iname.lower()):
+                                unlocked_cups.add(iname)
 
                 _update_state(
                     connected=True,
                     completed_locations=completed,
                     track_locations=track_locs,
                     unlocked_items=unlocked_items,
+                    unlocked_cups=unlocked_cups,
                     include_race_checks=include_race,
                     enable_item_randomization=enable_items,
                 )
@@ -551,9 +571,15 @@ async def _ap_client_loop() -> None:
                         elif cmd == "ReceivedItems":
                             for net_item in m.get("items", []):
                                 iname = item_id_to_name.get(net_item.get("item", -1))
-                                if iname and iname.startswith("Powerup:") and iname not in unlocked_items:
+                                if not iname:
+                                    continue
+                                if iname.startswith("Powerup:") and iname not in unlocked_items:
                                     unlocked_items.append(iname)
                                     changed = True
+                                if "Cup" in iname and ("cc" in iname.lower() or "mirror" in iname.lower()):
+                                    if iname not in unlocked_cups:
+                                        unlocked_cups.add(iname)
+                                        changed = True
 
                         elif cmd == "RoomUpdate":
                             new_checked = m.get("checked_locations", [])
@@ -573,6 +599,7 @@ async def _ap_client_loop() -> None:
                             completed_locations=completed,
                             track_locations=track_locs,
                             unlocked_items=unlocked_items,
+                            unlocked_cups=unlocked_cups,
                         )
 
         except Exception as e:
@@ -1272,12 +1299,20 @@ class TrackerApp(App):
                                if AP_SERVER else "Enter credentials to connect…")
             self._txt.color = list(TEXT_DIM)
 
-        completed  = state["completed_locations"]
-        track_locs = state["track_locations"]
-        unlocked   = set(state["unlocked_items"])
+        completed    = state["completed_locations"]
+        track_locs   = state["track_locations"]
+        unlocked     = set(state["unlocked_items"])
+        unlocked_cups = state["unlocked_cups"]
 
         for (cup, cc), cell in self.cells.items():
             tier = completed.get(f"{cup}||{cc}", "none")
+            if tier == "none":
+                # No completion yet, show locked/unlocked status
+                cup_cc_key = f"{cup} {cc}"
+                if cup_cc_key in unlocked_cups:
+                    tier = "unlocked"
+                else:
+                    tier = "locked"
             cell.set_tier(tier)
 
         for (track, cc), cell in self.tcells.items():
