@@ -181,6 +181,7 @@ FILLER_ITEMS = {
 
 # Special items
 SPECIAL_ITEMS = {
+    "Victory Trophy": ItemData(BASE_ID + 700, "progression"),
     "Victory": ItemData(None, "progression"),
 }
 

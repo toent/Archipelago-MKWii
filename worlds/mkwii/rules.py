@@ -57,38 +57,13 @@ def set_rules(world: "MKWiiWorld") -> None:
                     cup_item = f"{cup} {cc}"
                     entrance.access_rule = lambda state, ci=cup_item: state.has(ci, player)
 
-    # Victory condition
-    goal_cc = CC_INDEX[world.options.goal_cc.value]
-    goal_difficulty = DIFFICULTY_INDEX[world.options.goal_difficulty.value]
+    # Victory condition: collect enough Victory Trophies
+    # Victory Trophies are pre-placed at the goal tier + goal CC locations
+    # for all 8 cups. The player needs cups_required_for_goal of them.
     cups_required = world.options.cups_required_for_goal.value
 
-    goal_cups = []
-    for cup in CUPS:
-        if "star" in goal_difficulty:
-            loc_name = f"{cup} {goal_cc} - {goal_difficulty.replace('_', ' ').title()}"
-        else:
-            loc_name = f"{cup} {goal_cc} - {goal_difficulty.replace('_', ' ')}"
-        try:
-            multiworld.get_location(loc_name, player)
-            goal_cups.append(cup)
-        except KeyError:
-            pass
-
     def victory_rule(state: CollectionState) -> bool:
-        count = 0
-        for cup in goal_cups:
-            # Check if this cup at goal_cc is a starting pair
-            is_starting = (starting_cups.get(cup) == goal_cc)
-
-            if is_starting:
-                count += 1
-            elif goal_cc == "Mirror":
-                cup_item = f"{cup} Mirror"
-                if state.has_any(ALL_MIRROR_CUPS, player) and state.has(cup_item, player):
-                    count += 1
-            elif state.has(f"{cup} {goal_cc}", player):
-                count += 1
-        return count >= cups_required
+        return state.has("Victory Trophy", player, cups_required)
 
     for entrance in menu.exits:
         if entrance.name == "To Victory":

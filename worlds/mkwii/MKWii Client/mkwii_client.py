@@ -175,6 +175,7 @@ class MKWiiContext(CommonContext):
         self.slot_data: dict = {}
         self.seed: Optional[str] = None
         self.goal_reached: bool = False
+        self.victory_trophies: int = 0
         self._memory_poll_task: Optional[asyncio.Task] = None
         self._initial_state_loaded: bool = False
 
@@ -312,7 +313,26 @@ class MKWiiContext(CommonContext):
 
     def _process_item(self, item_name: str, sender_player: int = 0, location_id: int = 0) -> None:
         """Route a received item to the appropriate unlock set / item slot queue."""
-        if "Character:" in item_name:
+        if item_name == "Victory Trophy":
+            self.victory_trophies += 1
+            required = self.slot_data.get("cups_required_for_goal", 6)
+            console_logger.info(
+                f"Victory Trophy received! ({self.victory_trophies}/{required})"
+            )
+            _report_handler(
+                f"INFO: Victory Trophy received! ({self.victory_trophies}/{required})",
+                self.dolphin_mgr
+            )
+            if not self.goal_reached and self.victory_trophies >= required:
+                self.goal_reached = True
+                logger.info(
+                    f"GOAL COMPLETE: {self.victory_trophies}/{required} Victory Trophies"
+                )
+                asyncio.create_task(
+                    self.send_msgs([{"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}])
+                )
+
+        elif "Character:" in item_name:
             char = item_name.replace("Character: ", "")
             self.unlocked_characters.add(char)
             self._apply_unlock(char, "character")
@@ -841,55 +861,10 @@ class MKWiiContext(CommonContext):
             self.completed_locations[key] = tier
 
     async def _check_goal(self) -> None:
-        if self.goal_reached or not self.slot_data:
-            return
-
-        required   = self.slot_data.get("cups_required_for_goal", 6)
-        goal_cc    = CC_NAMES[self.slot_data.get("goal_cc", 2)]
-        goal_tier  = TIER_HIERARCHY[min(self.slot_data.get("goal_difficulty", 3), len(TIER_HIERARCHY) - 1)]
-        goal_idx   = TIER_HIERARCHY.index(goal_tier)
-
-        enabled_tiers = self.slot_data.get(
-            "enabled_cup_check_tiers",
-            ["3rd_place", "2nd_place", "1st_place", "1_star", "2_star"]
-        )
-
-        count = 0
-        for cup in CUPS:
-            achieved = self.completed_locations.get((cup, goal_cc), "none")
-            achieved_idx = TIER_HIERARCHY.index(achieved) if achieved in TIER_HIERARCHY else -1
-
-            if achieved_idx < goal_idx:
-                continue
-
-            # Only require lower tiers that were both enabled in enabled_cup_check_tiers
-            # and actually generated as locations in this seed. Tiers disabled by the
-            # player or absent from location_name_to_id are skipped rather than treated
-            # as missing progression.
-            valid_progression = True
-            for lower_idx in range(goal_idx):
-                lower_tier = TIER_HIERARCHY[lower_idx]
-                if lower_tier not in enabled_tiers:
-                    continue
-                if lower_tier.__contains__("star"):
-                    loc_name = f"{cup} {goal_cc} - {lower_tier.replace('_', ' ').title()}"
-                else:
-                    loc_name = f"{cup} {goal_cc} - {lower_tier.replace('_', ' ')}"
-                loc_id = self.location_name_to_id.get(loc_name)
-                if not loc_id:
-                    continue
-                if loc_id not in self.checked_locations:
-                    valid_progression = False
-                    break
-
-            if valid_progression:
-                count += 1
-
-        if count >= required:
-            self.goal_reached = True
-            logger.info(f"GOAL COMPLETE: {count}/{required} cups at "
-                        f"{goal_tier.replace('_', ' ')}+ on {goal_cc}")
-            await self.send_msgs([{"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}])
+        """Goal checking is now handled by Victory Trophy items in _process_item.
+        This method is kept for compatibility but does nothing.
+        """
+        pass
 
 
 # Entry point
