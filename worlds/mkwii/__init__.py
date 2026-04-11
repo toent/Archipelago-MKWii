@@ -16,9 +16,9 @@ from worlds.AutoWorld import WebWorld, World
 from .items import (
     MKWiiItem, ItemData, item_table, ALL_CUPS,
     CUP_CC_ITEMS, MODE_ITEMS, CHARACTER_ITEMS, KART_ITEMS, BIKE_ITEMS,
-    POWERUP_ITEMS, TRAP_ITEMS, FILLER_ITEMS,
+    POWERUP_ITEMS, TRAP_ITEMS, FILLER_ITEMS, SPECIAL_ITEMS,
 )
-from .locations import location_table
+from .locations import location_table, CUPS, DIFFICULTY_TIERS
 from .options import MKWiiOptions
 from .regions import create_regions
 from .rules import set_rules
@@ -106,6 +106,25 @@ class MKWiiWorld(World):
         # Pick starting cups for this seed
         self.starting_cups = self._pick_starting_cups()
 
+        # Pre-place Victory Trophies at goal tier + goal CC locations
+        # for all 8 cups. These are placed directly on the locations
+        # so they always end up in the player's own game.
+        cc_index = ["50cc", "100cc", "150cc", "Mirror"]
+        diff_index = ["3rd_place", "2nd_place", "1st_place", "1_star", "2_star", "3_star"]
+        goal_cc = cc_index[self.options.goal_cc.value]
+        goal_diff = diff_index[self.options.goal_difficulty.value]
+
+        for cup in ALL_CUPS:
+            if "star" in goal_diff:
+                loc_name = f"{cup} {goal_cc} - {goal_diff.replace('_', ' ').title()}"
+            else:
+                loc_name = f"{cup} {goal_cc} - {goal_diff.replace('_', ' ')}"
+            try:
+                loc = self.multiworld.get_location(loc_name, self.player)
+                loc.place_locked_item(self.create_item("Victory Trophy"))
+            except KeyError:
+                pass
+
         # Cup unlocks: all cups for all enabled CCs, except the starting cup/CC pairs
         for cup in ALL_CUPS:
             for cc in self.options.enabled_ccs.value:
@@ -170,7 +189,7 @@ class MKWiiWorld(World):
             classification = ItemClassification.trap
         elif name in FILLER_ITEMS:
             classification = ItemClassification.filler
-        elif name == "Victory":
+        elif name == "Victory" or name == "Victory Trophy":
             classification = ItemClassification.progression
         elif name in CHARACTER_ITEMS or name in KART_ITEMS or name in BIKE_ITEMS:
             classification = ItemClassification.useful
