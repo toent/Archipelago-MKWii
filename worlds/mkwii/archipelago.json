@@ -1,7 +1,7 @@
 {
   "game": "Mario Kart Wii",
   "package_name": "mkwii",
-  "world_version": "0.1.1",
+  "world_version": "0.2.0 ",
   "minimum_ap_version": "0.6.6",
   "display_name": "Mario Kart Wii",
   "authors": ["toent"],

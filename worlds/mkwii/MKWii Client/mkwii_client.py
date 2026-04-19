@@ -255,9 +255,33 @@ class MKWiiContext(CommonContext):
             self.slot_data = args.get("slot_data", {})
             console_logger.info(f"Slot data keys: {list(self.slot_data.keys())}")
 
-            # Load starting cups from slot_data and pre-populate unlocked_cups
-            starting_cups = self.slot_data.get("starting_cups", {})
-            for cup_name, cc in starting_cups.items():
+            # Load starting cups from slot_data and pre-populate unlocked_cups.
+            # starting_cups can arrive as a dict {"Cup Name": "cc"} from current apworld versions, or as a list from older generated seeds.
+            starting_cups_raw = self.slot_data.get("starting_cups", {})
+            if isinstance(starting_cups_raw, dict):
+                starting_cups_iter = starting_cups_raw.items()
+            elif isinstance(starting_cups_raw, list):
+                # Older format: list of [cup_name, cc] pairs, or just cup names with no CC.
+                starting_cups_iter = (
+                    (entry[0], entry[1]) if isinstance(entry, (list, tuple)) and len(entry) >= 2
+                    else (entry, "50cc")
+                    for entry in starting_cups_raw
+                )
+                console_logger.warning(
+                    "[SlotData] starting_cups arrived as a list (old seed format), "
+                    "parsed as cup/cc pairs. Regenerate the seed to avoid this warning."
+                )
+                _report_handler(
+                    "WARNING: [SlotData] starting_cups arrived as a list (old seed format). "
+                    "Regenerate the seed to avoid this warning.", self.dolphin_mgr
+                )
+            else:
+                console_logger.warning(
+                    f"[SlotData] Unexpected starting_cups type: {type(starting_cups_raw)}, skipping."
+                )
+                starting_cups_iter = []
+
+            for cup_name, cc in starting_cups_iter:
                 item_name = f"{cup_name} {cc}"
                 self.unlocked_cups.add(item_name)
                 console_logger.info(f"Starting cup: {item_name}")
