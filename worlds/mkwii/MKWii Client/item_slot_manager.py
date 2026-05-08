@@ -60,6 +60,7 @@ _ITEM_COUNT_OFFSET = 0x90
 _GM_ACTIVATION_FLAG_OFFSET = 0xA4
 _GM_TIMER_OFFSET           = 0xA8
 _GM_SECONDARY_TIMER_OFFSET = 0xAC
+_ROULETTE_DISPLAY_OFFSET = 0x6C
 
 # In game item IDs
 ITEM_ID: Dict[str, int] = {
@@ -270,6 +271,14 @@ class RaceStateReader:
             return _read_u8(_TRACK_ID_ADDR)
         except Exception:
             return 0xFF
+        
+    def read_p1_roulette_active(self, ih_ptr: int) -> bool:
+        try:
+            roulette_display = _read_u32(ih_ptr + _ROULETTE_DISPLAY_OFFSET)
+            actual_item      = _read_u32(ih_ptr + _ITEM_ID_OFFSET)
+            return roulette_display != EMPTY_ID and actual_item == EMPTY_ID
+        except Exception:
+            return False
 
     def read_cc_name(self) -> Optional[str]:
         try:
@@ -546,6 +555,9 @@ class ItemSlotManager:
             item_id, count = self._read_slot(ih_ptr)
         except Exception as e:
             logger.warning(f"[ItemSlot] Slot read error: {e}")
+            return
+        
+        if self._race_reader.read_p1_roulette_active(ih_ptr):
             return
 
         is_empty = (item_id == EMPTY_ID or count == 0)
