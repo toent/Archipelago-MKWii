@@ -186,6 +186,7 @@ class DolphinManager:
         response = input("\n  Are you at the license select screen? (y/n): ").strip().lower()
         if response != "y":
             if input("  Continue anyway? (y/n): ").strip().lower() != "y":
+                sys.exit(0)
                 return False
         return True
 

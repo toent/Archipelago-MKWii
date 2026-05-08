@@ -176,6 +176,8 @@ class MKWiiContext(CommonContext):
         self.seed: Optional[str] = None
         self.goal_reached: bool = False
         self.victory_trophies: int = 0
+        self._suppress_goal_send: bool = False
+        self.victory_trophies: int = 0
         self._memory_poll_task: Optional[asyncio.Task] = None
         self._initial_state_loaded: bool = False
 
@@ -187,6 +189,8 @@ class MKWiiContext(CommonContext):
         # Cup lock race-level state
         self._race_on_locked_cup: bool = False
         self._prev_in_race: bool = False
+        self._redirected_for_current_race: bool = False
+        self._last_redirect_cc: Optional[str] = None
 
         # Item slot manager (created once room_id / seed is known)
         self._item_slot_mgr: Optional[ItemSlotManager] = None
@@ -323,17 +327,35 @@ class MKWiiContext(CommonContext):
             self._handle_received_items(args)
 
     # Item reception
-
     def _handle_received_items(self, args: dict) -> None:
         from worlds.mkwii.items import item_table
 
         start_index = args["index"]
         id_to_name = {data.code: name for name, data in item_table.items()}
 
+        is_replay = (start_index == 0)
+        if is_replay:
+            self._suppress_goal_send = True
+
         for i, item in enumerate(args["items"]):
             name = id_to_name.get(item.item, f"Unknown({item.item})")
             console_logger.info(f"Received #{start_index + i}: {name}")
             self._process_item(name, item.player, item.location)
+
+        if is_replay:
+            self._suppress_goal_send = False
+            required = self.slot_data.get("cups_required_for_goal", 6)
+            if not self.goal_reached and self.victory_trophies >= required:
+                self.goal_reached = True
+                logger.info(
+                    f"Goal already completed from a previous session "
+                    f"({self.victory_trophies}/{required} Victory Trophies)"
+                )
+                _report_handler(
+                    f"INFO: Goal already completed from a previous session "
+                    f"({self.victory_trophies}/{required} Victory Trophies)",
+                    self.dolphin_mgr
+                )
 
     def _process_item(self, item_name: str, sender_player: int = 0, location_id: int = 0) -> None:
         """Route a received item to the appropriate unlock set / item slot queue."""
@@ -347,7 +369,7 @@ class MKWiiContext(CommonContext):
                 f"INFO: Victory Trophy received! ({self.victory_trophies}/{required})",
                 self.dolphin_mgr
             )
-            if not self.goal_reached and self.victory_trophies >= required:
+            if not self.goal_reached and not self._suppress_goal_send and self.victory_trophies >= required:
                 self.goal_reached = True
                 logger.info(
                     f"GOAL COMPLETE: {self.victory_trophies}/{required} Victory Trophies"
@@ -651,6 +673,11 @@ class MKWiiContext(CommonContext):
         """
         if not self.dolphin or not self.dolphin.is_connected:
             return
+        
+        current_cc = self.dolphin.read_selected_cc()
+        if current_cc != self._last_redirect_cc:
+            self._redirected_for_current_race = False
+            self._last_redirect_cc = current_cc
 
         try:
             # Layer 1: Menu-level redirect
@@ -663,11 +690,12 @@ class MKWiiContext(CommonContext):
                     cup_cc_key = f"{selected_cup_name} {cc}"
 
                     if cup_cc_key not in self.unlocked_cups:
-                        # Locked cup selected, try to redirect
                         redirect_id = self._find_redirect_cup(cc)
                         if redirect_id is not None:
                             if self.dolphin.redirect_cup(redirect_id):
                                 redirect_name = CUP_ID_TO_NAME.get(redirect_id, "?")
+                                self._redirected_for_current_race = True
+                                self._last_redirect_cc = cc  # Tie the flag to this specific CC
                                 console_logger.info(
                                     f"Cup redirect: {selected_cup_name} {cc} -> {redirect_name} {cc}"
                                 )
@@ -680,33 +708,38 @@ class MKWiiContext(CommonContext):
             in_race, race_mgr = self.dolphin.is_in_race()
 
             if in_race and not self._prev_in_race:
-                # Race just started, check if it's on a locked cup
-                track_id = self.dolphin.read_race_track_id()
-                track_cup_id = TRACK_TO_CUP.get(track_id, -1)
-                track_cup_name = CUP_ID_TO_NAME.get(track_cup_id)
-                cc = self.dolphin.read_selected_cc()
+                if self._redirected_for_current_race:
+                    # Redirect already handled this, trust it and skip the freeze check
+                    self._race_on_locked_cup = False
+                    self._redirected_for_current_race = False
+                else:
+                    track_id = self.dolphin.read_race_track_id()
+                    track_cup_id = TRACK_TO_CUP.get(track_id, -1)
+                    track_cup_name = CUP_ID_TO_NAME.get(track_cup_id)
+                    cc = self.dolphin.read_selected_cc()
 
-                if track_cup_name and cc:
-                    cup_cc_key = f"{track_cup_name} {cc}"
-                    if cup_cc_key not in self.unlocked_cups:
-                        self._race_on_locked_cup = True
-                        console_logger.info(
-                            f"Race on locked cup: {track_cup_name} {cc}, freezing laps"
-                        )
-                        _report_handler(
-                            f"INFO: Race on locked cup: {track_cup_name} {cc}, freezing laps",
-                            self.dolphin_mgr
-                        )
+                    if track_cup_name and cc:
+                        cup_cc_key = f"{track_cup_name} {cc}"
+                        if cup_cc_key not in self.unlocked_cups:
+                            self._race_on_locked_cup = True
+                            console_logger.info(
+                                f"Race on locked cup: {track_cup_name} {cc}, freezing laps"
+                            )
+                            _report_handler(
+                                f"INFO: Race on locked cup: {track_cup_name} {cc}, freezing laps",
+                                self.dolphin_mgr
+                            )
+                        else:
+                            self._race_on_locked_cup = False
                     else:
                         self._race_on_locked_cup = False
-                else:
-                    self._race_on_locked_cup = False
 
             if in_race and self._race_on_locked_cup:
                 self.dolphin.freeze_p1_lap(race_mgr)
 
             if not in_race and self._prev_in_race:
                 self._race_on_locked_cup = False
+                self._redirected_for_current_race = False  # Clean up on race end too
 
             self._prev_in_race = in_race
 
