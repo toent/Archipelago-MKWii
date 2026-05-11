@@ -58,8 +58,6 @@ _LAP_OFFSET       = 0x25
 _ITEM_ID_OFFSET    = 0x8C
 _ITEM_COUNT_OFFSET = 0x90
 _GM_ACTIVATION_FLAG_OFFSET = 0xA4
-_GM_TIMER_OFFSET           = 0xA8
-_GM_SECONDARY_TIMER_OFFSET = 0xAC
 _ROULETTE_DISPLAY_OFFSET = 0x6C
 
 # In game item IDs
@@ -319,9 +317,9 @@ class ItemSlotManager:
         self._targeted_queue: Deque[str] = deque()
         self._filler_queue: Deque[str]   = deque()
         self._future_traps_queue: Deque[str] = deque()
-
+        
         self._pending_trap: Optional[str] = None
-        # Active race inject state — updated by poll(), consumed by run_inject_loop()
+        # Active race inject state, updated by poll(), consumed by run_inject_loop()
         self._inject_ih_ptr:    int = 0
         self._inject_placement: int = 0
         # Set of (sender_player, location_id) tuples already queued.
@@ -485,12 +483,10 @@ class ItemSlotManager:
         _write_u32(ih_ptr + _ITEM_ID_OFFSET,    item_id)
         _write_u32(ih_ptr + _ITEM_COUNT_OFFSET, count)
         if item_id == ITEM_ID["Golden Mushroom"]:
-            _write_u32(ih_ptr + _GM_ACTIVATION_FLAG_OFFSET, 0x01000000)  # activation flag
-            _write_u32(ih_ptr + _GM_TIMER_OFFSET, 0x000001C0)  # main timer  (448 frames)
-            _write_u32(ih_ptr + _GM_SECONDARY_TIMER_OFFSET, 0x000001B6)  # secondary timer (438 frames)
+            _write_u32(ih_ptr + _GM_ACTIVATION_FLAG_OFFSET, 0x01000000)
         logger.info(f"[ItemSlot] Wrote: {game_item_name} (id=0x{item_id:02X} count={count})")
         return True
-
+    
     # Race lifecycle
 
     def _on_new_race(self) -> None:
