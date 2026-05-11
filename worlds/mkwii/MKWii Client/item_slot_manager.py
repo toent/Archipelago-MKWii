@@ -312,6 +312,8 @@ class ItemSlotManager:
         self.unlocked_items: Set[str] = initial
 
         self.item_slot_was_empty: bool  = True
+        self._roulette_start_placement: int = 0
+        self._prev_roulette_active: bool    = False
         self.was_filler_trap_given: bool = False
 
         self._targeted_queue: Deque[str] = deque()
@@ -490,10 +492,12 @@ class ItemSlotManager:
     # Race lifecycle
 
     def _on_new_race(self) -> None:
-        self.item_slot_was_empty     = True
-        self.was_filler_trap_given   = False
-        self._check_sent_this_race   = False
-        self._pending_trap           = None
+        self._roulette_start_placement  = 0
+        self._prev_roulette_active      = False
+        self.item_slot_was_empty        = True
+        self.was_filler_trap_given      = False
+        self._check_sent_this_race      = False
+        self._pending_trap              = None
         logger.debug("[ItemSlot] New race: per-race state reset")
 
     # Main poll
@@ -553,8 +557,13 @@ class ItemSlotManager:
             logger.warning(f"[ItemSlot] Slot read error: {e}")
             return
         
-        if self._race_reader.read_p1_roulette_active(ih_ptr):
+        roulette_active = self._race_reader.read_p1_roulette_active(ih_ptr)
+        if roulette_active:
+            if not self._prev_roulette_active:
+                self._roulette_start_placement = placement
+            self._prev_roulette_active = True
             return
+        self._prev_roulette_active = False
 
         is_empty = (item_id == EMPTY_ID or count == 0)
         prev_was_empty = self.item_slot_was_empty
@@ -593,7 +602,7 @@ class ItemSlotManager:
         self.item_slot_was_empty = is_empty
 
         if prev_was_empty and not is_empty and not self.was_filler_trap_given:
-            game_item = self._pick_pool_item(placement)
+            game_item = self._pick_pool_item(self._roulette_start_placement)
             if game_item is None:
                 _write_u32(ih_ptr + _ITEM_ID_OFFSET,    EMPTY_ID)
                 _write_u32(ih_ptr + _ITEM_COUNT_OFFSET, 0)
