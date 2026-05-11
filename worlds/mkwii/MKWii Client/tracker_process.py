@@ -204,6 +204,10 @@ TRACKS = {
     "Lightning Cup": ["SNES Mario Circuit 3", "DS Peach Gardens", "GCN DK Mountain", "N64 Bowser's Castle"],
 }
 
+_TRACK_TO_CUP: dict[str, str] = {
+    track: cup for cup, tracks in TRACKS.items() for track in tracks
+}
+
 POWERUP_ITEMS = [
     "Powerup: Red Shell",
     "Powerup: Triple Bananas",
@@ -647,7 +651,7 @@ ICON_CUP_SZ  = int(dp(36))
 ICON_AP_SZ   = int(dp(56))
 ICON_MKWII_SZ = int(dp(72))
 
-# Typography scale — use these names everywhere, never raw sp() for font sizes.
+# Typography scale, use these names everywhere, never raw sp() for font sizes.
 # H1:    major titles (top bar heading, dot)
 # H2:    section headings (login title, cup section "Flower Cup", connect button)
 # H3:    body emphasis (track names, login inputs, tab buttons, cc labels, status)
@@ -808,6 +812,7 @@ class TrackCell:
             self._bd_l = Line(rectangle=(0, 0, CELL_SIZE, CELL_SIZE), width=1)
         self.widget.bind(pos=self._sync, size=self._sync)
         self._lbl = Label(text="", color=list(TEXT_DIM), font_size=FS_TEXT,
+                          font_name=_EMOJI_FONT,
                           bold=True, halign="center", valign="middle",
                           pos_hint={"center_x": 0.5, "center_y": 0.5},
                           size_hint=(1, 1))
@@ -820,14 +825,19 @@ class TrackCell:
         self._bg_r.pos  = (x, y)
         self._bg_r.size = (w, h)
         self._bd_l.rectangle = (x, y, w, h)
-        self._lbl.font_size = max(FS_SMALL, int(min(w, h) * 0.18))
+        self._lbl.font_size = max(FS_SMALL, int(min(w, h) * 0.28))
 
-    def set_done(self, done: bool):
+    def set_state(self, done: bool, cup_unlocked: bool):
         if done:
             self._bg_c.rgba = list(_hex4("#deb900"))
             self._bd_c.rgba = list(BORDER_GLOW)
             self._lbl.text  = self._cc
             self._lbl.color = list(_hex4("#645000"))
+        elif cup_unlocked:
+            self._bg_c.rgba = list(_hex4("#0a1a0a"))
+            self._bd_c.rgba = list(BORDER_GLOW)
+            self._lbl.text  = "🔓"
+            self._lbl.color = list(_hex4("#336633"))
         else:
             self._bg_c.rgba = list(BG_CELL_EMPTY)
             self._bd_c.rgba = list(BORDER_LIGHT)
@@ -836,7 +846,7 @@ class TrackCell:
 
 
 class ItemCell:
-    # Icon size in dp — scales with display density, independent of cell pixel size
+    # Icon size in dp, scales with display density, independent of cell pixel size
     _ICON_DP = int(dp(46))
     _LBL_H   = int(dp(22))
 
@@ -1343,15 +1353,14 @@ class TrackerApp(App):
                 self._txt.text = "Enter credentials to connect…"
             self._txt.color = list(TEXT_DIM)
 
-        completed    = state["completed_locations"]
-        track_locs   = state["track_locations"]
-        unlocked     = set(state["unlocked_items"])
+        completed     = state["completed_locations"]
+        track_locs    = state["track_locations"]
+        unlocked      = set(state["unlocked_items"])
         unlocked_cups = state["unlocked_cups"]
 
         for (cup, cc), cell in self.cells.items():
             tier = completed.get(f"{cup}||{cc}", "none")
             if tier == "none":
-                # No completion yet, show locked/unlocked status
                 cup_cc_key = f"{cup} {cc}"
                 if cup_cc_key in unlocked_cups:
                     tier = "unlocked"
@@ -1360,8 +1369,10 @@ class TrackerApp(App):
             cell.set_tier(tier)
 
         for (track, cc), cell in self.tcells.items():
-            done = track_locs.get(f"{track}||{cc}", False)
-            cell.set_done(done=done)
+            done         = track_locs.get(f"{track}||{cc}", False)
+            cup          = _TRACK_TO_CUP.get(track, "")
+            cup_unlocked = f"{cup} {cc}" in unlocked_cups
+            cell.set_state(done=done, cup_unlocked=cup_unlocked)
 
         for item_name, cell in self.icells.items():
             cell.set_unlocked(unlocked=(item_name in unlocked))
