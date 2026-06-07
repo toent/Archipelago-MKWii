@@ -204,9 +204,6 @@ TRAP_TO_GAME: Dict[str, str] = {
 # Traps held for future memory-effect implementation (no current in-game action)
 FUTURE_EFFECT_TRAPS: Set[str] = {"Brake Trap", "Gas Trap", "Boost Trap","POW Trap","Lightning Trap"}
 
-# Items always unlocked from a fresh save (start pool)
-DEFAULT_UNLOCKED_ITEMS: Set[str] = {"Banana", "Green Shell", "Fake Item Box", "Mushroom"}
-
 # Internal sentinel for "Filler: Random Item"
 _RANDOM_TOKEN = "__random__"
 
@@ -307,8 +304,8 @@ class ItemSlotManager:
         self.random_item_mode          = random_item_mode
         self.enable_item_randomization = enable_item_randomization
 
-        # Use slot_data starting_items if provided, else the hardcoded default
-        initial = set(starting_items) if starting_items else set(DEFAULT_UNLOCKED_ITEMS)
+        # Use slot_data starting_items if provided, else set Empty array
+        initial = set(starting_items) if starting_items else set([])
         self.unlocked_items: Set[str] = initial
 
         self.item_slot_was_empty: bool  = True
@@ -456,11 +453,11 @@ class ItemSlotManager:
 
     def _pick_pool_item(self, placement: int) -> Optional[str]:
         if self.random_item_mode == "random":
-            if not self.unlocked_items:
+            if not self.unlocked_items or len(self.unlocked_items) <= 0:
                 return None
             return choice(list(self.unlocked_items))
         items, weights = self._build_pool(placement)
-        if not items:
+        if not items or len(items) <= 0:
             return None
         return choices(items, weights=weights)[0]
 
