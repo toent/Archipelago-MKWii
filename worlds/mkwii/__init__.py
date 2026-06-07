@@ -48,6 +48,7 @@ class MKWiiWorld(World):
     options_dataclass = MKWiiOptions
     options: MKWiiOptions
     topology_present = False
+    ut_can_gen_without_yaml = True
     web = MKWiiWeb()
 
     item_name_to_id = {name: data.code for name, data in item_table.items() if data.code is not None}
@@ -71,8 +72,11 @@ class MKWiiWorld(World):
         "Mach Bike", "Bowser Bike",
     ]
 
-    # Per-instance starting cups, set during create_items
+    # Per-instance starting cups, set during generate_early
     starting_cups: typing.Dict[str, str]  # {"cup_name": "cc"}
+
+    def generate_early(self) -> None:
+        self.starting_cups = self._pick_starting_cups()
 
     def create_regions(self) -> None:
         create_regions(self)
@@ -102,9 +106,6 @@ class MKWiiWorld(World):
 
     def create_items(self) -> None:
         item_pool: typing.List[MKWiiItem] = []
-
-        # Pick starting cups for this seed
-        self.starting_cups = self._pick_starting_cups()
 
         # Pre-place Victory Trophies at goal tier + goal CC locations
         # for all 8 cups. These are placed directly on the locations
@@ -213,6 +214,9 @@ class MKWiiWorld(World):
 
     def set_rules(self) -> None:
         set_rules(self)
+
+    def interpret_slot_data(self, slot_data: dict) -> None:
+        self.starting_cups = slot_data["starting_cups"]
 
     def fill_slot_data(self) -> dict:
         return {
