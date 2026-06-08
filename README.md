@@ -30,7 +30,6 @@ presently, Archipelago is also the randomizer itself.
 * Do **NOT** use the speedup feature included in Dolphin as it has been known to skip over checks.
 * If you get any directory errors regarding saves not loading, add `"dolphin_user_dir":"Y:/our/Filepath/Dolphin Emulator"` as the next entry in the `mkwii_ap_config.json`.
     * You can easily find your Dolphin Userdata by opening dolphin right-clicking a game and clicking `Open Wii Save Folder`, and then navigate back until you are in the `Dolphin Emulator` folder (this is the directory the client will need).
-* When using automatic dolphin startup, make sure all other instances of dolphin are closed (as well as any dolphin library windows).
 * Individual race checks **can** be completed through VS-Race as well.
 * For **Linux** make sure to use the use the **flatpak** version of Dolphin, other versions will **not** work.
 
