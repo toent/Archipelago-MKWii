@@ -6,9 +6,9 @@ presently, Archipelago is also the randomizer itself.
 ## MKWii
 ### Things you will need:
 * An **unmodified PAL** Mario Kart Wii ROM
-* [Dolphin 2512](https://dolphin-emu.org/download/release/2512/) (Dolphin 5 or higher is the minimum)
+* [Dolphin 2512+](https://dolphin-emu.org/download/release/2512/) (Dolphin 5 or higher is the minimum)
 * [Latest MKWii Client and APWorld Release](https://github.com/toent/Archipelago-MKWii/releases/latest)
-* **LINUX ONLY** [Python 3.13.12](https://www.python.org/downloads/release/python-31312/) and [Git](https://git-scm.com/install/) are needed
+* LINUX ONLY [Python 3.13.12](https://www.python.org/downloads/release/python-31312/) and [Git](https://git-scm.com/install/) are needed
 
 ### Getting Set up:
 1. Install the requirements marked above according to their installers.
@@ -17,13 +17,12 @@ presently, Archipelago is also the randomizer itself.
 4. **Windows:** Download the latest client and run `mkwii_client.exe`.
 5. **Linux:** Download the source code that goes along with the latest client and run `MKWii Client/mkwii_client.py`.
 6. **Linux:** Install required packages (the client will do this automatically after prompting you).
-7. The client will ask for your savefile, choose the one you get by going to `Dolphin > MKWii > Right Click > Open Wii Save Folder`.
-8. If you opt for **Auto Dolphin start**, the client will ask for your ROM and your Dolphin make sure to assign them correctly.
-9. If you opt for **Manual Dolphin start**, make sure the client is at the license selection question before opening your emulation instance.
-10. If you opt for **Auto tracker start**, the tracker will be opened once you connect to archipelago. You can still close it seperately and open it seperately as well.
-11. If you opt for **Manual track start**, the tracker wont open and you need to run `mkwii tracker.exe` or `tracker_process.py` and connect to the archipelago.
-12. Follow other instructions posed by the client and connect to the Archipelago.
-13. The client includes a text client and tracker window, they will open automatically.
+7. The client will ask for your savefile, choose the one you get by going to `Dolphin > MKWii > Right Click > Open Wii Save Folder`, if there is no `rksys.dat` savefile, just start your game once, and make a license.
+8. Make sure the client is at the license selection question before opening your emulation instance.
+9. If you opt for **Auto tracker start**, the tracker will be opened once you connect to archipelago. You can still close it seperately and open it seperately as well.
+10. If you opt for **Manual track start**, the tracker wont open and you need to run `mkwii tracker.exe` or `tracker_process.py` and connect to the archipelago.
+11. Follow other instructions posed by the client and connect to the Archipelago.
+12. The client includes a text client and tracker window, they will open automatically.
 
 ### Good to know (READ THIS):
 * The client might not connect to dolphin properly sometimes eventhough some text says it is, use `/status` in the client to check for connection or check the tracker window. To fix this, just restart the client and try again or try `/hook` in the client.
@@ -36,20 +35,21 @@ presently, Archipelago is also the randomizer itself.
 * For **Linux** make sure to use the use the **flatpak** version of Dolphin, other versions will **not** work.
 
 ### Current Features:
-#### What features are currently available?
+**What features are currently available?**
 - Fully completable from start to finish.
 - Character, Cup, Vehicle and Kart/Bike Swap unlocks.
 - Grand Prix ranking location checks (per CC).
 - Vanilla unlock blocking.
 - Achieve [x] rank on [y] cups on [z]CC for Goal options.
 - Item unlocks.
-- Functional, usefull filler items.
+- Functional, useful filler items.
 - Individual race location checks.
+- Default unlocked cup/track blocking.
 
-#### What features are **not** currently available (but are planned for the future)?
+**What features are *not* currently available (but are planned for the future)?**
 - Traps.
 - Time trials location checks.
-- Default unlocked characters, vehicle & cup blocking.
+- Default unlocked characters, vehicle blocking.
 
 ## Arcipelago History
 
