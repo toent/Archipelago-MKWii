@@ -175,7 +175,6 @@ class MKWiiContext(CommonContext):
         self.slot_data: dict = {}
         self.seed: Optional[str] = None
         self.goal_reached: bool = False
-        self.victory_trophies: int = 0
         self._suppress_goal_send: bool = False
         self.victory_trophies: int = 0
         self._memory_poll_task: Optional[asyncio.Task] = None
@@ -248,6 +247,7 @@ class MKWiiContext(CommonContext):
         if password_requested and not self.password:
             await super().server_auth(password_requested)
         await self.get_username()
+        self.victory_trophies = 0
         await self.send_connect()
 
     def on_package(self, cmd: str, args: dict) -> None:
@@ -444,6 +444,8 @@ class MKWiiContext(CommonContext):
         """Re-apply every AP-granted unlock. Called after savestate load or reconnect."""
         if not self.dolphin or not self.dolphin.is_connected:
             return
+        
+        self.victory_trophies = 0
 
         count = 0
         for char in self.unlocked_characters:
