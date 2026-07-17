@@ -327,6 +327,8 @@ _state = {
     "unlocked_cups":          set(),
     "include_race_checks":    True,
     "enable_item_randomization": True,
+    "victory_trophies":          0,
+    "victory_trophies_required": 0,
 }
 
 
@@ -345,6 +347,8 @@ def _read_state() -> dict:
             "unlocked_cups":           set(_state["unlocked_cups"]),
             "include_race_checks":     _state["include_race_checks"],
             "enable_item_randomization": _state["enable_item_randomization"],
+            "victory_trophies":          _state["victory_trophies"],
+            "victory_trophies_required": _state["victory_trophies_required"],
         }
 
 
@@ -503,6 +507,7 @@ async def _ap_client_loop() -> None:
                 slot_data    = connected_msg.get("slot_data", {})
                 include_race = bool(slot_data.get("include_race_checks", True))
                 enable_items = bool(slot_data.get("enable_item_randomization", True))
+                trophies_required = int(slot_data.get("cups_required_for_goal", 6))
                 _GAME_TO_AP = {v: k for k, v in {
                     "Powerup: Red Shell":           "Red Shell",
                     "Powerup: Triple Bananas":      "Triple Bananas",
@@ -548,12 +553,15 @@ async def _ap_client_loop() -> None:
                     _parse_cup_location(name, completed)
                     _parse_track_location(name, track_locs)
 
+                victory_trophies = 0
                 for m in msgs:
                     if m["cmd"] == "ReceivedItems":
                         for net_item in m.get("items", []):
                             iname = item_id_to_name.get(net_item.get("item", -1))
                             if not iname:
                                 continue
+                            if iname == "Victory Trophy":
+                                victory_trophies += 1
                             if iname.startswith("Powerup:") and iname not in unlocked_items:
                                 unlocked_items.append(iname)
                             # Cup unlock items: "{Cup Name} {cc}" e.g. "Mushroom Cup 50cc"
@@ -568,6 +576,8 @@ async def _ap_client_loop() -> None:
                     unlocked_cups=unlocked_cups,
                     include_race_checks=include_race,
                     enable_item_randomization=enable_items,
+                    victory_trophies=victory_trophies,
+                    victory_trophies_required=trophies_required,
                 )
                 print(f"[Tracker] Connected - {len(checked_ids)} checked locations, "
                       f"race={include_race}, items={enable_items}, "
@@ -589,6 +599,9 @@ async def _ap_client_loop() -> None:
                                 iname = item_id_to_name.get(net_item.get("item", -1))
                                 if not iname:
                                     continue
+                                if iname == "Victory Trophy":
+                                    victory_trophies += 1
+                                    changed = True
                                 if iname.startswith("Powerup:") and iname not in unlocked_items:
                                     unlocked_items.append(iname)
                                     changed = True
@@ -616,6 +629,8 @@ async def _ap_client_loop() -> None:
                             track_locations=track_locs,
                             unlocked_items=unlocked_items,
                             unlocked_cups=unlocked_cups,
+                            victory_trophies=victory_trophies,
+                            victory_trophies_required=trophies_required,
                         )
 
         except Exception as e:
@@ -969,6 +984,7 @@ class TrackerApp(App):
             size_hint=(None, None),
             pos_hint={"center_y": 0.5})
         self._txt.bind(texture_size=self._on_status_text_resize)
+        self._dot.bind(pos=self._layout_status_row, size=self._layout_status_row)
 
         # Eye toggle for showing/hiding server IP
         self._show_connection_details = False
@@ -984,6 +1000,18 @@ class TrackerApp(App):
         status_row.add_widget(self._eye_btn)
         info_col.add_widget(status_row)
         top_bar.add_widget(info_col)
+
+        trophy_col = AnchorLayout(anchor_x="center", anchor_y="center",
+                                  size_hint=(None, 1), width=int(dp(72)))
+        _paint_bg(trophy_col, BG_CARD, BORDER_LIGHT)
+        trophy_inner = BoxLayout(orientation="vertical", size_hint=(1, 1))
+        trophy_inner.add_widget(_label("🏆", TEXT_YELLOW, font_size=FS_H1, emoji=True,
+                                       size_hint_y=0.55))
+        self._trophy_lbl = _label("0/0", TEXT_DIM, font_size=FS_H3, bold=True,
+                                  size_hint_y=0.45)
+        trophy_inner.add_widget(self._trophy_lbl)
+        trophy_col.add_widget(trophy_inner)
+        top_bar.add_widget(trophy_col)
 
         if IMG_AP.exists():
             top_bar.add_widget(_centered_image(IMG_AP, ICON_AP_SZ, ICON_AP_SZ))
@@ -1027,13 +1055,20 @@ class TrackerApp(App):
 
     # eye toggle for connection details
 
+    def _layout_status_row(self, *_args):
+        """Reposition the status text and eye toggle relative to the dot.
+        Runs both when the text changes size and when the dot itself is first
+        laid out, since pos_hint only resolves to a real position once the
+        parent FloatLayout has done a layout pass."""
+        self._txt.x = self._dot.right + int(dp(3))
+        self._eye_btn.x = self._txt.right + int(dp(4))
+
     def _on_status_text_resize(self, inst, texture_size):
-        """Reposition the text label and eye button when text content changes."""
+        """Resize the text label to fit its content, then reposition around it."""
         tw, th = texture_size
         inst.size = (tw, th)
         inst.text_size = (None, None)
-        inst.x = self._dot.right + int(dp(3))
-        self._eye_btn.x = inst.right + int(dp(4))
+        self._layout_status_row()
 
     def _on_eye_toggle(self, widget, touch):
         if widget.collide_point(*touch.pos):
@@ -1364,6 +1399,13 @@ class TrackerApp(App):
             else:
                 self._txt.text = "Enter credentials to connect…"
             self._txt.color = list(TEXT_DIM)
+
+        trophies          = state["victory_trophies"]
+        trophies_required = state["victory_trophies_required"]
+        self._trophy_lbl.text  = f"{trophies}/{trophies_required}"
+        self._trophy_lbl.color = list(TEXT_YELLOW if
+                                       (trophies_required and trophies >= trophies_required)
+                                       else TEXT_DIM)
 
         completed     = state["completed_locations"]
         track_locs    = state["track_locations"]
