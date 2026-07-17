@@ -11,10 +11,13 @@ from __future__ import annotations
 
 import json
 import os
+import ssl
 import sys
 import asyncio
 import threading
 from pathlib import Path
+
+import certifi
 
 AP_SERVER  = sys.argv[1] if len(sys.argv) > 1 else ""
 AP_SLOT    = sys.argv[2] if len(sys.argv) > 2 else ""
@@ -40,6 +43,12 @@ def _excepthook(exc_type, exc_value, exc_tb):
 sys.excepthook = _excepthook
 
 sys.path.insert(0, str(_HERE.parent))
+
+
+def _ssl_context() -> ssl.SSLContext:
+    """Build the same SSL context Archipelago's CommonClient uses, verifying
+    against certifi's CA bundle instead of the OS default trust store."""
+    return ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=certifi.where())
 
 
 def _ap_version() -> dict:
@@ -421,7 +430,9 @@ async def _ap_client_loop() -> None:
             for candidate in uri_candidates:
                 try:
                     print(f"[Tracker] Trying {candidate} as '{AP_SLOT}'...")
-                    async with websockets.connect(candidate, ping_interval=30, open_timeout=8) as _test:
+                    candidate_ssl = _ssl_context() if candidate.startswith("wss://") else None
+                    async with websockets.connect(candidate, ping_interval=30, open_timeout=8,
+                                                   ssl=candidate_ssl) as _test:
                         pass
                     uri = candidate
                     break
@@ -433,7 +444,8 @@ async def _ap_client_loop() -> None:
                 continue
             uri_candidates = [uri]
             print(f"[Tracker] Connecting to {uri} as '{AP_SLOT}'...")
-            async with websockets.connect(uri, ping_interval=30) as ws:
+            uri_ssl = _ssl_context() if uri.startswith("wss://") else None
+            async with websockets.connect(uri, ping_interval=30, ssl=uri_ssl) as ws:
 
                 # handshake
 
