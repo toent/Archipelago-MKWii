@@ -243,8 +243,8 @@ class DolphinMemoryManager:
         self._hooked: bool = False
         self._suppress_warnings: Dict[str, bool] = {}
         self.mgr: DolphinManager = DolphinManager()
-        if(logger is not None):
-            self.logger = logger
+        self.logger = logger if logger is not None else logging.getLogger("MKWii.Memory")
+        self.unlockblock_patch_applied_once = False
 
     @property
     def is_connected(self) -> bool:
@@ -278,7 +278,7 @@ class DolphinMemoryManager:
         Returns True if fully connected with valid save system pointers.
         Silently returns False during normal boot (memory not yet mapped).
         """
-        logger.info("Attempting to hook to Dolphin and resolve MKWii pointers...")
+        self.logger.info("Attempting to hook to Dolphin and resolve MKWii pointers...")
         _report_handler("INFO: Attempting to hook to Dolphin and resolve MKWii pointers...", self.mgr)
         try:
             # Only hook if not already hooked
@@ -286,15 +286,15 @@ class DolphinMemoryManager:
                 dme.hook()
 
             if not dme.is_hooked():
-                logger.warning("DME failed to hook!")
+                self.logger.warning("DME failed to hook!")
                 _report_handler("WARNING: DME failed to hook!", self.mgr)
                 return False
 
-            logger.info("DME hooked successfully, resolving pointers...")
+            self.logger.info("DME hooked successfully, resolving pointers...")
             _report_handler("INFO: DME hooked successfully, resolving pointers...", self.mgr)
             return await self.async_resolve_pointers()
         except Exception as e:
-            logger.error(f"Hook failed unexpectedly: {e}")
+            self.logger.error(f"Hook failed unexpectedly: {e}")
             _report_handler(f"ERROR: Hook failed unexpectedly: {e}", self.mgr)
             try:
                 dme.un_hook()
@@ -309,12 +309,12 @@ class DolphinMemoryManager:
         try:
             game_id = dme.read_bytes(0x80000000, 6).decode("ascii", errors="replace")
         except Exception as e:
-            logger.warning("boot", f"Waiting for Dolphin to load game: {e}")
+            self.logger.warning(f"Waiting for Dolphin to load game: {e}")
             _report_handler(f"WARNING: Waiting for Dolphin to load game: {e}", self.mgr)    
             return False
 
         if game_id != "RMCP01":
-            logger.warning(f"Wrong game ID: {game_id} (expected RMCP01)")
+            self.logger.warning(f"Wrong game ID: {game_id} (expected RMCP01)")
             _report_handler(f"WARNING: Wrong game ID: {game_id} (expected RMCP01)", self.mgr)
             return False
 
@@ -322,14 +322,14 @@ class DolphinMemoryManager:
         try:
             raw = dme.read_bytes(SYSTEM_MANAGER_PTR, 4)
         except Exception as e:
-            logger.warning(f"Game still initializing: {e}")
+            self.logger.warning(f"Game still initializing: {e}")
             _report_handler(f"WARNING: Game still initializing: {e}", self.mgr)
             return False
 
         mgr_ptr = struct.unpack(">I", raw)[0]
         await asyncio.sleep(0.1)
         if mgr_ptr < 0x80000000:
-            logger.warning("Waiting for game to load past title screen...")
+            self.logger.warning("Waiting for game to load past title screen...")
             _report_handler("WARNING: Waiting for game to load past title screen...", self.mgr)
             return False
 
@@ -339,7 +339,7 @@ class DolphinMemoryManager:
         try:
             save_ptr_raw = dme.read_bytes(mgr_ptr + RAW_SAVE_OFFSET, 4)
         except Exception as e:
-            logger.warning(f"Save system loading: {e}")
+            self.logger.warning(f"Save system loading: {e}")
             _report_handler(f"WARNING: Save system loading: {e}", self.mgr)
             return False
 
@@ -347,7 +347,7 @@ class DolphinMemoryManager:
         await asyncio.sleep(0.1)
         
         if save_ptr < 0x80000000:
-            logger.warning(f"Save system loading: {save_ptr}")
+            self.logger.warning(f"Save system loading: {save_ptr}")
             _report_handler(f"WARNING: Save system loading: {save_ptr}", self.mgr)
             return False
 
@@ -356,14 +356,14 @@ class DolphinMemoryManager:
         try:
             magic = dme.read_bytes(save_ptr, 4)
         except Exception as e:
-            logger.warning(f"Save buffer not ready: {e}")
+            self.logger.warning(f"Save buffer not ready: {e}")
             _report_handler(f"WARNING: Save buffer not ready: {e}", self.mgr)
             return False
         
         await asyncio.sleep(0.1)
 
         if magic != b"RKSD":
-            logger.warning(f"Save buffer initializing (magic: {magic.hex()})...")
+            self.logger.warning(f"Save buffer initializing (magic: {magic.hex()})...")
             _report_handler(f"WARNING: Save buffer initializing (magic: {magic.hex()})...", self.mgr)
             return False
 
@@ -376,7 +376,7 @@ class DolphinMemoryManager:
         self._hooked = True
         self._suppress_warnings.clear()
 
-        logger.info(
+        self.logger.info(
             f"Hooked: manager=0x{mgr_ptr:08X} "
             f"runtime=0x{self._runtime_base:08X} "
             f"rksys=0x{save_ptr:08X}"
@@ -508,7 +508,7 @@ class DolphinMemoryManager:
 
             return (trophy, rank)
         except Exception as e:
-            logger.error(f"Error reading GP result for cup {cup_id} {cc}: {e}")
+            self.logger.error(f"Error reading GP result for cup {cup_id} {cc}: {e}")
             _report_handler(f"ERROR: Error reading GP result for cup {cup_id} {cc}: {e}", self.mgr)
             return ("none", "D")
 
@@ -621,24 +621,26 @@ class DolphinMemoryManager:
         successfully, False if both writes fail.
         """
         if not self._hooked:
-            logger.warning("patch_vanilla_unlock_block: not hooked, skipping")
+            self.logger.warning("patch_vanilla_unlock_block: not hooked, skipping")
             _report_handler("WARNING: patch_vanilla_unlock_block: not hooked, skipping", self.mgr)
             return
 
         # Primary patch
         try:
             dme.write_bytes(self._PATCH_PRIMARY_ADDR, self._PATCH_PRIMARY_BYTES)
-            logger.info(
-                f"Unlock-block patch applied at 0x{self._PATCH_PRIMARY_ADDR:08X} "
-                f"({self._PATCH_PRIMARY_BYTES.hex().upper()})"
-            )
-            _report_handler(
-                f"INFO: Unlock-block patch applied at 0x{self._PATCH_PRIMARY_ADDR:08X} "
-                f"({self._PATCH_PRIMARY_BYTES.hex().upper()})", self.mgr
-            )
+            if(not self.unlockblock_patch_applied_once):
+                self.logger.info(
+                    f"Unlock-block patch applied at 0x{self._PATCH_PRIMARY_ADDR:08X} "
+                    f"({self._PATCH_PRIMARY_BYTES.hex().upper()})"
+                )
+                _report_handler(
+                    f"INFO: Unlock-block patch applied at 0x{self._PATCH_PRIMARY_ADDR:08X} "
+                    f"({self._PATCH_PRIMARY_BYTES.hex().upper()})", self.mgr
+                )
+                self.unlockblock_patch_applied_once = True
             return
         except Exception as e:
-            logger.warning(
+            self.logger.warning(
                 f"Primary patch failed at 0x{self._PATCH_PRIMARY_ADDR:08X}: {e} "
                 f", trying fallback..."
             )
@@ -650,17 +652,19 @@ class DolphinMemoryManager:
         # Fallback patch
         try:
             dme.write_bytes(self._PATCH_FALLBACK_ADDR, self._PATCH_FALLBACK_BYTES)
-            logger.info(
-                f"Unlock-block fallback patch applied at 0x{self._PATCH_FALLBACK_ADDR:08X} "
-                f"({self._PATCH_FALLBACK_BYTES.hex().upper()})"
-            )
-            _report_handler(
-                f"INFO:Unlock-block fallback patch applied at 0x{self._PATCH_FALLBACK_ADDR:08X} "
-                f"({self._PATCH_FALLBACK_BYTES.hex().upper()})", self.mgr
-            )
+            if(not self.unlockblock_patch_applied_once):
+                self.logger.info(
+                    f"Unlock-block fallback patch applied at 0x{self._PATCH_FALLBACK_ADDR:08X} "
+                    f"({self._PATCH_FALLBACK_BYTES.hex().upper()})"
+                )
+                _report_handler(
+                    f"INFO:Unlock-block fallback patch applied at 0x{self._PATCH_FALLBACK_ADDR:08X} "
+                    f"({self._PATCH_FALLBACK_BYTES.hex().upper()})", self.mgr
+                )
+                self.unlockblock_patch_applied_once = True
             return
         except Exception as e:
-            logger.error(
+            self.logger.error(
                 f"Fallback patch also failed at 0x{self._PATCH_FALLBACK_ADDR:08X}: {e}"
             )
             _report_handler(
@@ -672,5 +676,5 @@ class DolphinMemoryManager:
 
     def _warn_once(self, key: str, msg: str) -> None:
         if not self._suppress_warnings.get(key):
-            logger.warning(msg)
+            self.logger.warning(msg)
             self._suppress_warnings[key] = True

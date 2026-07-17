@@ -298,11 +298,13 @@ class ItemSlotManager:
         random_item_mode: str = "placement",  # "placement" | "uniform"
         starting_items: Optional[List[str]] = None,
         enable_item_randomization: bool = True,
+        logger=None,
     ) -> None:
         self.room_id                   = room_id
         self.queue_path                = queue_dir / f"{room_id}.itemqueue"
         self.random_item_mode          = random_item_mode
         self.enable_item_randomization = enable_item_randomization
+        self.logger                    = logger if logger is not None else logging.getLogger("MKWii.ItemSlot")
 
         # Use slot_data starting_items if provided, else set Empty array
         initial = set(starting_items) if starting_items else set([])
@@ -344,7 +346,7 @@ class ItemSlotManager:
             self._future_traps_queue = deque(data.get("future_traps", []))
             # Stored as [[player, location], ...] — convert back to set of tuples
             self._seen_item_ids      = {tuple(pair) for pair in data.get("seen_item_ids", [])}
-            logger.info(
+            self.logger.info(
                 f"[ItemSlot] Loaded queue from {self.queue_path.name}: "
                 f"{len(self._targeted_queue)} targeted, "
                 f"{len(self._filler_queue)} filler, "
@@ -352,7 +354,7 @@ class ItemSlotManager:
                 f"{len(self._seen_item_ids)} seen"
             )
         except Exception as e:
-            logger.warning(f"[ItemSlot] Failed to load queue: {e}")
+            self.logger.warning(f"[ItemSlot] Failed to load queue: {e}")
 
     def _save_queue(self) -> None:
         try:
@@ -368,7 +370,7 @@ class ItemSlotManager:
                 encoding="utf-8",
             )
         except Exception as e:
-            logger.warning(f"[ItemSlot] Failed to save queue: {e}")
+            self.logger.warning(f"[ItemSlot] Failed to save queue: {e}")
 
     # Public API: item receiving
 
@@ -379,27 +381,27 @@ class ItemSlotManager:
 
         if ap_item_name in TRAP_TO_GAME:
             self._pending_trap = TRAP_TO_GAME[ap_item_name]
-            logger.info(f"[ItemSlot] Trap pending overwrite: {ap_item_name} -> {self._pending_trap}")
+            self.logger.info(f"[ItemSlot] Trap pending overwrite: {ap_item_name} -> {self._pending_trap}")
 
         elif ap_item_name in FUTURE_EFFECT_TRAPS:
             self._future_traps_queue.append(ap_item_name)
-            logger.info(f"[ItemSlot] Future trap queued (no current effect): {ap_item_name}")
+            self.logger.info(f"[ItemSlot] Future trap queued (no current effect): {ap_item_name}")
 
         elif ap_item_name == "Filler: Random Item":
             self._filler_queue.append(_RANDOM_TOKEN)
-            logger.info("[ItemSlot] Filler: Random Item queued (resolves at give-time)")
+            self.logger.info("[ItemSlot] Filler: Random Item queued (resolves at give-time)")
 
         else:
             game_name = AP_TO_GAME.get(ap_item_name)
             if game_name:
                 if ap_item_name.startswith("Powerup:"):
                     self._targeted_queue.append(game_name)
-                    logger.info(f"[ItemSlot] Targeted powerup queued: {ap_item_name} -> {game_name}")
+                    self.logger.info(f"[ItemSlot] Targeted powerup queued: {ap_item_name} -> {game_name}")
                 else:
                     self._filler_queue.append(game_name)
-                    logger.info(f"[ItemSlot] Filler queued: {ap_item_name} -> {game_name}")
+                    self.logger.info(f"[ItemSlot] Filler queued: {ap_item_name} -> {game_name}")
             else:
-                logger.debug(f"[ItemSlot] No item-slot action for: {ap_item_name}")
+                self.logger.debug(f"[ItemSlot] No item-slot action for: {ap_item_name}")
 
         self._seen_item_ids.add(item_uid)
         self._save_queue()
@@ -407,7 +409,7 @@ class ItemSlotManager:
     def unlock_item_in_pool(self, game_item_name: str) -> None:
         if game_item_name in ITEM_ID:
             self.unlocked_items.add(game_item_name)
-            logger.debug(f"[ItemSlot] Unlocked pool item: {game_item_name}")
+            self.logger.debug(f"[ItemSlot] Unlocked pool item: {game_item_name}")
 
     # Pool helpers
 
@@ -429,7 +431,7 @@ class ItemSlotManager:
             items, weights = _try(p)
             if items:
                 if p != clamped:
-                    logger.debug(
+                    self.logger.debug(
                         f"[ItemSlot] Placement {clamped} pool empty, fell back up to {p}"
                     )
                 return items, weights
@@ -438,7 +440,7 @@ class ItemSlotManager:
         for p in range(clamped + 1, 13):
             items, weights = _try(p)
             if items:
-                logger.debug(
+                self.logger.debug(
                     f"[ItemSlot] Placement {clamped} pool empty, fell back down to {p}"
                 )
                 return items, weights
@@ -446,9 +448,9 @@ class ItemSlotManager:
         # No unlocked items found anywhere - signal empty slot
         if self.unlocked_items:
             fallback = list(self.unlocked_items)
-            logger.warning("[ItemSlot] All placement pools empty — using equal-weight fallback")
+            self.logger.warning("[ItemSlot] All placement pools empty — using equal-weight fallback")
             return fallback, [1] * len(fallback)
-        logger.warning("[ItemSlot] No unlocked items at all — slot will be cleared")
+        self.logger.warning("[ItemSlot] No unlocked items at all — slot will be cleared")
         return [], []
 
     def _pick_pool_item(self, placement: int) -> Optional[str]:
@@ -476,14 +478,14 @@ class ItemSlotManager:
     def _write_slot(self, ih_ptr: int, game_item_name: str) -> bool:
         item_id = ITEM_ID.get(game_item_name)
         if item_id is None:
-            logger.warning(f"[ItemSlot] Unknown item for write: {game_item_name}")
+            self.logger.warning(f"[ItemSlot] Unknown item for write: {game_item_name}")
             return False
         count = _ITEM_COUNT_MAP.get(item_id, 1)
         _write_u32(ih_ptr + _ITEM_ID_OFFSET,    item_id)
         _write_u32(ih_ptr + _ITEM_COUNT_OFFSET, count)
         if item_id == ITEM_ID["Golden Mushroom"]:
             _write_u32(ih_ptr + _GM_ACTIVATION_FLAG_OFFSET, 0x01000000)
-        logger.info(f"[ItemSlot] Wrote: {game_item_name} (id=0x{item_id:02X} count={count})")
+        self.logger.info(f"[ItemSlot] Wrote: {game_item_name} (id=0x{item_id:02X} count={count})")
         return True
     
     # Race lifecycle
@@ -495,7 +497,7 @@ class ItemSlotManager:
         self.was_filler_trap_given      = False
         self._check_sent_this_race      = False
         self._pending_trap              = None
-        logger.debug("[ItemSlot] New race: per-race state reset")
+        self.logger.debug("[ItemSlot] New race: per-race state reset")
 
     # Main poll
 
@@ -544,14 +546,14 @@ class ItemSlotManager:
                 if self._inject_ih_ptr != 0:
                     self._inject(self._inject_ih_ptr, self._inject_placement)
             except Exception as e:
-                logger.warning(f"[ItemSlot] Inject loop error: {e}")
+                self.logger.warning(f"[ItemSlot] Inject loop error: {e}")
             await asyncio.sleep(0.016)
 
     def _inject(self, ih_ptr: int, placement: int) -> None:
         try:
             item_id, count = self._read_slot(ih_ptr)
         except Exception as e:
-            logger.warning(f"[ItemSlot] Slot read error: {e}")
+            self.logger.warning(f"[ItemSlot] Slot read error: {e}")
             return
         
         roulette_active = self._race_reader.read_p1_roulette_active(ih_ptr)
@@ -590,7 +592,7 @@ class ItemSlotManager:
             if game_item is None:
                 _write_u32(ih_ptr + _ITEM_ID_OFFSET,    EMPTY_ID)
                 _write_u32(ih_ptr + _ITEM_COUNT_OFFSET, 0)
-                logger.info("[ItemSlot] No unlocked items - cleared slot")
+                self.logger.info("[ItemSlot] No unlocked items - cleared slot")
             elif self._write_slot(ih_ptr, game_item):
                 self.was_filler_trap_given = True
                 self.item_slot_was_empty   = False
@@ -603,6 +605,6 @@ class ItemSlotManager:
             if game_item is None:
                 _write_u32(ih_ptr + _ITEM_ID_OFFSET,    EMPTY_ID)
                 _write_u32(ih_ptr + _ITEM_COUNT_OFFSET, 0)
-                logger.info("[ItemSlot] No unlocked items — cleared slot")
+                self.logger.info("[ItemSlot] No unlocked items — cleared slot")
             else:
                 self._write_slot(ih_ptr, game_item)
