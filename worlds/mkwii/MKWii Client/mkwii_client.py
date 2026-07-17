@@ -307,6 +307,7 @@ class MKWiiContext(CommonContext):
                 random_item_mode          = random_mode,
                 starting_items            = self.slot_data.get("starting_items"),
                 enable_item_randomization = self.slot_data.get("enable_item_randomization", True),
+                logger                    = console_logger,
             )
             # Re-sync unlocked powerup pool from already-received items
             self._resync_item_slot_pool()
