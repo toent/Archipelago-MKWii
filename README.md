@@ -52,6 +52,13 @@ presently, Archipelago is also the randomizer itself.
 - Default unlocked characters, vehicle blocking.
 - Overlay system for displaying character, vehicle, and cup availability.
 
+### Version Information:
+Let me touch on how I will be naming versions and updates:
+- Hotfixes: 0.0.0-h*x* update.
+- Small update with minor features/fixes: 0.0.*x* update.
+- Big update with major new features: 0.*x*.0 update.
+- Full "out of beta release" or full rewrites: *x*.0.0 update.
+
 ## Arcipelago History
 
 Archipelago is built upon a strong legacy of brilliant hobbyists. We want to honor that legacy by showing it here.
