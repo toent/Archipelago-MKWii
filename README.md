@@ -50,6 +50,7 @@ presently, Archipelago is also the randomizer itself.
 - Traps.
 - Time trials location checks.
 - Default unlocked characters, vehicle blocking.
+- Overlay system for displaying character, vehicle, and cup availability.
 
 ## Arcipelago History
 
