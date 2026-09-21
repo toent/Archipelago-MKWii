@@ -175,7 +175,6 @@ class MKWiiContext(CommonContext):
         self.slot_data: dict = {}
         self.seed: Optional[str] = None
         self.goal_reached: bool = False
-        self._suppress_goal_send: bool = False
         self.victory_trophies: int = 0
         self._memory_poll_task: Optional[asyncio.Task] = None
         self._initial_state_loaded: bool = False
@@ -247,7 +246,6 @@ class MKWiiContext(CommonContext):
         if password_requested and not self.password:
             await super().server_auth(password_requested)
         await self.get_username()
-        self.victory_trophies = 0
         await self.send_connect()
 
     def on_package(self, cmd: str, args: dict) -> None:
@@ -334,50 +332,44 @@ class MKWiiContext(CommonContext):
         start_index = args["index"]
         id_to_name = {data.code: name for name, data in item_table.items()}
 
-        is_replay = (start_index == 0)
-        if is_replay:
-            self._suppress_goal_send = True
+        # Index 0 is a full resend, allow the goal to be sent again in case an earlier send was lost
+        if start_index == 0:
+            self.goal_reached = False
 
         for i, item in enumerate(args["items"]):
             name = id_to_name.get(item.item, f"Unknown({item.item})")
             console_logger.info(f"Received #{start_index + i}: {name}")
             self._process_item(name, item.player, item.location)
 
-        if is_replay:
-            self._suppress_goal_send = False
-            required = self.slot_data.get("cups_required_for_goal", 6)
-            if not self.goal_reached and self.victory_trophies >= required:
-                self.goal_reached = True
-                logger.info(
-                    f"Goal already completed from a previous session "
-                    f"({self.victory_trophies}/{required} Victory Trophies)"
-                )
-                _report_handler(
-                    f"INFO: Goal already completed from a previous session "
-                    f"({self.victory_trophies}/{required} Victory Trophies)",
-                    self.dolphin_mgr
-                )
+        self._update_victory_goal()
+
+    def _update_victory_goal(self) -> None:
+        """Recount Victory Trophies from the server item list and send the goal once when met."""
+        from worlds.mkwii.items import item_table
+
+        trophy_code = item_table["Victory Trophy"].code
+        required = self.slot_data.get("cups_required_for_goal", 6)
+        count = sum(1 for item in self.items_received if item.item == trophy_code)
+
+        if count != self.victory_trophies:
+            self.victory_trophies = count
+            console_logger.info(f"Victory Trophies: {count}/{required}")
+            _report_handler(f"INFO: Victory Trophies: {count}/{required}", self.dolphin_mgr)
+
+        if self.goal_reached or count < required:
+            return
+
+        self.goal_reached = True
+        logger.info(f"GOAL COMPLETE: {count}/{required} Victory Trophies")
+        asyncio.create_task(
+            self.send_msgs([{"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}])
+        )
 
     def _process_item(self, item_name: str, sender_player: int = 0, location_id: int = 0) -> None:
         """Route a received item to the appropriate unlock set / item slot queue."""
         if item_name == "Victory Trophy":
-            self.victory_trophies += 1
-            required = self.slot_data.get("cups_required_for_goal", 6)
-            console_logger.info(
-                f"Victory Trophy received! ({self.victory_trophies}/{required})"
-            )
-            _report_handler(
-                f"INFO: Victory Trophy received! ({self.victory_trophies}/{required})",
-                self.dolphin_mgr
-            )
-            if not self.goal_reached and not self._suppress_goal_send and self.victory_trophies >= required:
-                self.goal_reached = True
-                logger.info(
-                    f"GOAL COMPLETE: {self.victory_trophies}/{required} Victory Trophies"
-                )
-                asyncio.create_task(
-                    self.send_msgs([{"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}])
-                )
+            # Counted from items_received in _update_victory_goal
+            pass
 
         elif "Character:" in item_name:
             char = item_name.replace("Character: ", "")
@@ -445,8 +437,6 @@ class MKWiiContext(CommonContext):
         """Re-apply every AP-granted unlock. Called after savestate load or reconnect."""
         if not self.dolphin or not self.dolphin.is_connected:
             return
-        
-        self.victory_trophies = 0
 
         count = 0
         for char in self.unlocked_characters:
@@ -849,8 +839,6 @@ class MKWiiContext(CommonContext):
 
         self._pending_location_ids -= self.checked_locations
 
-        await self._check_goal()
-
     async def _on_race_first_place(self, track_name: str, cc_name: str) -> None:
         """
         Callback from ItemSlotManager when P1 finishes 1st on a specific track.
@@ -919,12 +907,6 @@ class MKWiiContext(CommonContext):
         new_idx     = TIER_HIERARCHY.index(tier)     if tier     in TIER_HIERARCHY else -1
         if new_idx > current_idx:
             self.completed_locations[key] = tier
-
-    async def _check_goal(self) -> None:
-        """Goal checking is now handled by Victory Trophy items in _process_item.
-        This method is kept for compatibility but does nothing.
-        """
-        pass
 
 
 # Entry point
