@@ -6,6 +6,19 @@ Starting cups: Two cups are randomly chosen during generation.
   - The other to the second lowest (typically 100cc)
   - This forces the player to use both karts and bikes early on
   - All other cup/CC combinations are locked and received as AP items
+
+Starting characters/vehicles: picked during generation, same as cups.
+  - Two characters of different weight classes are picked when
+    lock_default_characters is on. They're removed from the pool and
+    granted directly. When off, every default character is already
+    available, so nothing needs picking.
+  - One kart and one bike are picked when lock_default_vehicles is on,
+    in two distinct weight classes. Those classes come from the starting
+    characters when they were picked, otherwise two random distinct
+    classes are picked directly. Both are removed from the pool and
+    granted directly.
+  - Characters/vehicles with real save-file unlock bits are always in
+    the pool regardless of these two options.
 """
 import typing
 from random import choices, sample
@@ -14,14 +27,18 @@ from BaseClasses import ItemClassification, Tutorial
 from worlds.AutoWorld import WebWorld, World
 
 from .items import (
-    MKWiiItem, ItemData, item_table, ALL_CUPS,
-    CUP_CC_ITEMS, MODE_ITEMS, CHARACTER_ITEMS, KART_ITEMS, BIKE_ITEMS,
+    MKWiiItem, ItemData, item_table, ALL_CUPS, ALL_CHARACTERS, ALL_KARTS, ALL_BIKES,
+    CHARACTER_WEIGHT_CLASS, VEHICLE_WEIGHT_CLASS,
+    CUP_CC_ITEMS, MODE_ITEMS, CHARACTER_ITEMS, DEFAULT_CHARACTER_ITEMS,
+    KART_ITEMS, DEFAULT_KART_ITEMS, BIKE_ITEMS, DEFAULT_BIKE_ITEMS,
     POWERUP_ITEMS, TRAP_ITEMS, FILLER_ITEMS, SPECIAL_ITEMS,
 )
 from .locations import location_table, CUPS, DIFFICULTY_TIERS
 from .options import MKWiiOptions
 from .regions import create_regions
 from .rules import set_rules
+
+WEIGHT_CLASSES = ["Small", "Medium", "Large"]
 
 
 class MKWiiWeb(WebWorld):
@@ -54,29 +71,18 @@ class MKWiiWorld(World):
     item_name_to_id = {name: data.code for name, data in item_table.items() if data.code is not None}
     location_name_to_id = {name: data.code for name, data in location_table.items() if data.code is not None}
 
-    # Characters available from a fresh save (no unlock bit in rksys.dat).
-    STARTING_CHARACTERS: typing.ClassVar[typing.List[str]] = [
-        "Mario", "Luigi", "Peach", "Yoshi", "Toad", "Koopa Troopa",
-        "Bowser", "Donkey Kong", "Wario", "Waluigi", "Baby Mario", "Baby Peach",
-    ]
-
-    # Vehicles without save file bits.
-    STARTING_KARTS: typing.ClassVar[typing.List[str]] = [
-        "Standard Kart S", "Standard Kart M", "Standard Kart L",
-        "Baby Booster", "Nostalgia 1", "Concerto",
-        "Mini Beast", "Offroader", "Flame Flyer",
-    ]
-    STARTING_BIKES: typing.ClassVar[typing.List[str]] = [
-        "Standard Bike S", "Standard Bike M", "Standard Bike L",
-        "Bullet Bike", "Nanobike", "Bon Bon",
-        "Mach Bike", "Bowser Bike",
-    ]
-
     # Per-instance starting cups, set during generate_early
     starting_cups: typing.Dict[str, str]  # {"cup_name": "cc"}
 
+    # Per-instance starting characters/vehicles, set during generate_early.
+    # Empty/None when the matching lock_default_* option is off.
+    starting_characters: typing.List[str]
+    starting_kart: typing.Optional[str]
+    starting_bike: typing.Optional[str]
+
     def generate_early(self) -> None:
         self.starting_cups = self._pick_starting_cups()
+        self.starting_characters, self.starting_kart, self.starting_bike = self._pick_starting_loadout()
 
     def create_regions(self) -> None:
         create_regions(self)
@@ -103,6 +109,40 @@ class MKWiiWorld(World):
         picked = self.random.sample(ALL_CUPS, 2)
 
         return {picked[0]: cc_1, picked[1]: cc_2}
+
+    def _pick_starting_loadout(
+        self,
+    ) -> typing.Tuple[typing.List[str], typing.Optional[str], typing.Optional[str]]:
+        """Pick the player's starting characters and vehicles.
+
+        Two characters of different weight classes are picked when
+        lock_default_characters is on, pulled from the pool and granted
+        directly. When it's off, no characters need picking, every default
+        is already available.
+
+        One kart and one bike are picked when lock_default_vehicles is on,
+        in two distinct weight classes. Those classes come from the
+        starting characters if lock_default_characters is also on,
+        otherwise two random distinct classes are picked directly.
+        """
+        classes = self.random.sample(WEIGHT_CLASSES, 2)
+
+        starting_characters: typing.List[str] = []
+        if self.options.lock_default_characters.value:
+            for wc in classes:
+                candidates = [c for c in ALL_CHARACTERS if CHARACTER_WEIGHT_CLASS[c] == wc]
+                starting_characters.append(self.random.choice(candidates))
+
+        starting_kart = None
+        starting_bike = None
+        if self.options.lock_default_vehicles.value:
+            kart_class, bike_class = classes[0], classes[1]
+            kart_candidates = [k for k in ALL_KARTS if VEHICLE_WEIGHT_CLASS[k] == kart_class]
+            bike_candidates = [b for b in ALL_BIKES if VEHICLE_WEIGHT_CLASS[b] == bike_class]
+            starting_kart = self.random.choice(kart_candidates)
+            starting_bike = self.random.choice(bike_candidates)
+
+        return starting_characters, starting_kart, starting_bike
 
     def create_items(self) -> None:
         item_pool: typing.List[MKWiiItem] = []
@@ -140,17 +180,49 @@ class MKWiiWorld(World):
         for mode_name in MODE_ITEMS:
             item_pool.append(self.create_item(mode_name))
 
-        # Characters (only those with save bits)
+        # Characters with save bits: always in the pool, minus whichever
+        # were picked as starting characters (the pick can land on either tier)
         for name in CHARACTER_ITEMS:
             char = name.split(": ", 1)[1]
-            if char not in self.STARTING_CHARACTERS:
+            if char in self.starting_characters:
+                continue
+            item_pool.append(self.create_item(name))
+
+        # Default characters: only in the pool if locking is on, minus
+        # whichever were picked as starting characters
+        if self.options.lock_default_characters.value:
+            for name in DEFAULT_CHARACTER_ITEMS:
+                char = name.split(": ", 1)[1]
+                if char in self.starting_characters:
+                    continue
                 item_pool.append(self.create_item(name))
 
-        # Vehicles (only those with save bits)
+        # Karts/bikes with save bits: always in the pool, minus whichever
+        # were picked as the starting kart/bike (the pick can land on either tier)
         for name in KART_ITEMS:
+            kart = name.split(": ", 1)[1]
+            if kart == self.starting_kart:
+                continue
             item_pool.append(self.create_item(name))
         for name in BIKE_ITEMS:
+            bike = name.split(": ", 1)[1]
+            if bike == self.starting_bike:
+                continue
             item_pool.append(self.create_item(name))
+
+        # Default karts/bikes: only in the pool if locking is on, minus
+        # whichever were picked as the starting kart/bike
+        if self.options.lock_default_vehicles.value:
+            for name in DEFAULT_KART_ITEMS:
+                kart = name.split(": ", 1)[1]
+                if kart == self.starting_kart:
+                    continue
+                item_pool.append(self.create_item(name))
+            for name in DEFAULT_BIKE_ITEMS:
+                bike = name.split(": ", 1)[1]
+                if bike == self.starting_bike:
+                    continue
+                item_pool.append(self.create_item(name))
 
         total_locations = len(self.multiworld.get_unfilled_locations(self.player))
         needed_items = total_locations - len(item_pool)
@@ -192,7 +264,11 @@ class MKWiiWorld(World):
             classification = ItemClassification.filler
         elif name == "Victory" or name == "Victory Trophy":
             classification = ItemClassification.progression
-        elif name in CHARACTER_ITEMS or name in KART_ITEMS or name in BIKE_ITEMS:
+        elif (
+            name in CHARACTER_ITEMS or name in DEFAULT_CHARACTER_ITEMS
+            or name in KART_ITEMS or name in DEFAULT_KART_ITEMS
+            or name in BIKE_ITEMS or name in DEFAULT_BIKE_ITEMS
+        ):
             classification = ItemClassification.useful
         elif name in MODE_ITEMS:
             classification = ItemClassification.useful
@@ -217,12 +293,17 @@ class MKWiiWorld(World):
 
     def interpret_slot_data(self, slot_data: dict) -> None:
         self.starting_cups = slot_data["starting_cups"]
+        self.starting_characters = slot_data.get("starting_characters", [])
+        self.starting_kart = slot_data.get("starting_kart")
+        self.starting_bike = slot_data.get("starting_bike")
 
     def fill_slot_data(self) -> dict:
         return {
             "enabled_ccs": list(self.options.enabled_ccs.value),
             "enabled_cup_check_tiers": list(self.options.enabled_cup_check_tiers.value),
             "include_race_checks": self.options.include_race_checks.value,
+            "lock_default_characters": bool(self.options.lock_default_characters.value),
+            "lock_default_vehicles": bool(self.options.lock_default_vehicles.value),
             "enable_item_randomization": bool(self.options.enable_item_randomization.value),
             "enable_traps": bool(self.options.enable_traps.value),
             "starting_items": list(self.options.starting_items.value),
@@ -232,10 +313,10 @@ class MKWiiWorld(World):
             "cups_required_for_goal": self.options.cups_required_for_goal.value,
             "goal_difficulty": self.options.goal_difficulty.value,
             "goal_cc": self.options.goal_cc.value,
-            "starting_characters": self.STARTING_CHARACTERS,
             "starting_cups": self.starting_cups,
-            "starting_karts": self.STARTING_KARTS,
-            "starting_bikes": self.STARTING_BIKES,
+            "starting_characters": self.starting_characters,
+            "starting_kart": self.starting_kart,
+            "starting_bike": self.starting_bike,
         }
 
     def _get_trap_weights(self) -> typing.Dict[str, int]:

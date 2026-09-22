@@ -52,7 +52,26 @@ class GoalCC(Choice):
     option_100cc = 1
     option_150cc = 2
     option_mirror = 3
-    default = 3  # 150cc
+    default = 3  # mirror
+
+
+class LockDefaultCharacters(Toggle):
+    """Add default characters (unlocked in vanilla) to the item pool and
+    require them to be found. Two starting characters of different weight
+    classes are still granted at the start.
+    When disabled, all default characters are available from the start."""
+    display_name = "Lock Default Characters"
+    default = 1
+
+
+class LockDefaultVehicles(Toggle):
+    """Add default karts and bikes (unlocked in vanilla) to the item pool
+    and require them to be found. A starting kart and starting bike are
+    still granted at the start, in weight classes that match the starting
+    characters (or two random classes if characters aren't locked).
+    When disabled, all default vehicles are available from the start."""
+    display_name = "Lock Default Vehicles"
+    default = 1
 
 
 class EnableItemRandomization(Toggle):
@@ -282,6 +301,8 @@ class MKWiiOptions(PerGameCommonOptions):
     cups_required_for_goal: CupsRequiredForGoal
     goal_difficulty: GoalDifficulty
     goal_cc: GoalCC
+    lock_default_characters: LockDefaultCharacters
+    lock_default_vehicles: LockDefaultVehicles
     enable_item_randomization: EnableItemRandomization
     starting_items: StartingItems
     random_item_mode: RandomItemMode

@@ -8,6 +8,14 @@ combinations must be received as AP items.
 Star/Special/Leaf/Lightning cups also have save-file unlock bits.
 Mushroom/Flower/Shell/Banana cups have no save bits and are blocked
 at runtime via RaceConfig memory overwrites.
+
+Characters and vehicles split into two tiers:
+  - CHARACTER_ITEMS/KART_ITEMS/BIKE_ITEMS: have real save-file unlock bits.
+    Always in the pool.
+  - DEFAULT_CHARACTER_ITEMS/DEFAULT_KART_ITEMS/DEFAULT_BIKE_ITEMS: unlocked
+    in vanilla, no save bits. Only added to the pool when the matching
+    lock_default_* option is on, and blocked at runtime via RaceConfig
+    menu-scenario overwrites, same mechanism as the base cups.
 """
 from typing import NamedTuple, Dict
 from BaseClasses import Item
@@ -79,7 +87,7 @@ MODE_ITEMS = {
 }
 
 
-# Character unlocks
+# Character unlocks (save-file bits)
 CHARACTER_ITEMS = {
     "Character: Baby Daisy": ItemData(BASE_ID + 100),
     "Character: Baby Luigi": ItemData(BASE_ID + 101),
@@ -98,7 +106,25 @@ CHARACTER_ITEMS = {
 }
 
 
-# Kart unlocks
+# Default character unlocks (no save bits, blocked via RaceConfig redirect).
+# Only added to the pool when lock_default_characters is on.
+DEFAULT_CHARACTER_ITEMS = {
+    "Character: Mario": ItemData(BASE_ID + 120),
+    "Character: Luigi": ItemData(BASE_ID + 121),
+    "Character: Peach": ItemData(BASE_ID + 122),
+    "Character: Yoshi": ItemData(BASE_ID + 123),
+    "Character: Toad": ItemData(BASE_ID + 124),
+    "Character: Koopa Troopa": ItemData(BASE_ID + 125),
+    "Character: Bowser": ItemData(BASE_ID + 126),
+    "Character: Donkey Kong": ItemData(BASE_ID + 127),
+    "Character: Wario": ItemData(BASE_ID + 128),
+    "Character: Waluigi": ItemData(BASE_ID + 129),
+    "Character: Baby Mario": ItemData(BASE_ID + 130),
+    "Character: Baby Peach": ItemData(BASE_ID + 131),
+}
+
+
+# Kart unlocks (save-file bits)
 KART_ITEMS = {
     "Kart: Turbo Blooper": ItemData(BASE_ID + 200),
     "Kart: Cheep Charger": ItemData(BASE_ID + 201),
@@ -112,7 +138,21 @@ KART_ITEMS = {
 }
 
 
-# Bike unlocks
+# Default kart unlocks (no save bits). Only added when lock_default_vehicles is on.
+DEFAULT_KART_ITEMS = {
+    "Kart: Standard Kart S": ItemData(BASE_ID + 220),
+    "Kart: Standard Kart M": ItemData(BASE_ID + 221),
+    "Kart: Standard Kart L": ItemData(BASE_ID + 222),
+    "Kart: Baby Booster": ItemData(BASE_ID + 223),
+    "Kart: Nostalgia 1": ItemData(BASE_ID + 224),
+    "Kart: Concerto": ItemData(BASE_ID + 225),
+    "Kart: Wild Wing": ItemData(BASE_ID + 226),
+    "Kart: Offroader": ItemData(BASE_ID + 227),
+    "Kart: Flame Flyer": ItemData(BASE_ID + 228),
+}
+
+
+# Bike unlocks (save-file bits)
 BIKE_ITEMS = {
     "Bike: Magicruiser": ItemData(BASE_ID + 300),
     "Bike: Twinkle Star": ItemData(BASE_ID + 301),
@@ -123,6 +163,20 @@ BIKE_ITEMS = {
     "Bike: Bubble Bike": ItemData(BASE_ID + 306),
     "Bike: Phantom": ItemData(BASE_ID + 307),
     "Bike: Torpedo": ItemData(BASE_ID + 308),
+}
+
+
+# Default bike unlocks (no save bits). Only added when lock_default_vehicles is on.
+DEFAULT_BIKE_ITEMS = {
+    "Bike: Standard Bike S": ItemData(BASE_ID + 320),
+    "Bike: Standard Bike M": ItemData(BASE_ID + 321),
+    "Bike: Standard Bike L": ItemData(BASE_ID + 322),
+    "Bike: Bullet Bike": ItemData(BASE_ID + 323),
+    "Bike: Nanobike": ItemData(BASE_ID + 324),
+    "Bike: Bon Bon": ItemData(BASE_ID + 325),
+    "Bike: Mach Bike": ItemData(BASE_ID + 326),
+    "Bike: Bowser Bike": ItemData(BASE_ID + 327),
+    "Bike: Wario Bike": ItemData(BASE_ID + 328),
 }
 
 
@@ -193,13 +247,67 @@ ALL_CUPS = [
 ]
 
 
+# Weight class per character, keyed by the name used in item names
+# (e.g. "Character: Mario" -> "Mario"). Covers both save-bit and
+# default characters.
+CHARACTER_WEIGHT_CLASS: Dict[str, str] = {
+    "Mario": "Medium", "Baby Peach": "Small", "Waluigi": "Large", "Bowser": "Large",
+    "Baby Daisy": "Small", "Dry Bones": "Small", "Baby Mario": "Small", "Luigi": "Medium",
+    "Toad": "Small", "Donkey Kong": "Large", "Yoshi": "Medium", "Wario": "Large",
+    "Baby Luigi": "Small", "Toadette": "Small", "Koopa Troopa": "Small", "Daisy": "Medium",
+    "Peach": "Medium", "Birdo": "Medium", "Diddy Kong": "Medium", "King Boo": "Large",
+    "Bowser Jr.": "Medium", "Dry Bowser": "Large", "Funky Kong": "Large", "Rosalina": "Large",
+}
+
+# Weight class per vehicle, keyed by the name used in item names
+# (e.g. "Kart: Standard Kart S" -> "Standard Kart S"). Covers both
+# save-bit and default vehicles, karts and bikes both.
+VEHICLE_WEIGHT_CLASS: Dict[str, str] = {
+    "Standard Kart S": "Small", "Standard Kart M": "Medium", "Standard Kart L": "Large",
+    "Baby Booster": "Small", "Nostalgia 1": "Medium", "Offroader": "Large",
+    "Concerto": "Small", "Wild Wing": "Medium", "Flame Flyer": "Large",
+    "Cheep Charger": "Small", "Turbo Blooper": "Medium", "Piranha Prowler": "Large",
+    "Rally Romper": "Small", "Royal Racer": "Medium", "Aero Glider": "Large",
+    "Blue Falcon": "Small", "B. Dasher Mk 2": "Medium", "Dragonetti": "Large",
+    "Standard Bike S": "Small", "Standard Bike M": "Medium", "Standard Bike L": "Large",
+    "Bullet Bike": "Small", "Mach Bike": "Medium", "Bowser Bike": "Large",
+    "Nanobike": "Small", "Bon Bon": "Medium", "Wario Bike": "Large",
+    "Quacker": "Small", "Rapide": "Medium", "Twinkle Star": "Large",
+    "Magicruiser": "Small", "Nitrocycle": "Medium", "Torpedo": "Large",
+    "Bubble Bike": "Small", "Dolphin Dasher": "Medium", "Phantom": "Large",
+}
+
+# All character/kart/bike names, regardless of tier. Used for picking
+# starting characters/vehicles, which can come from either tier.
+ALL_CHARACTERS = list(CHARACTER_WEIGHT_CLASS.keys())
+ALL_KARTS = [
+    "Standard Kart S", "Standard Kart M", "Standard Kart L",
+    "Baby Booster", "Nostalgia 1", "Offroader",
+    "Concerto", "Wild Wing", "Flame Flyer",
+    "Cheep Charger", "Turbo Blooper", "Piranha Prowler",
+    "Rally Romper", "Royal Racer", "Aero Glider",
+    "Blue Falcon", "B. Dasher Mk 2", "Dragonetti",
+]
+ALL_BIKES = [
+    "Standard Bike S", "Standard Bike M", "Standard Bike L",
+    "Bullet Bike", "Mach Bike", "Bowser Bike",
+    "Nanobike", "Bon Bon", "Wario Bike",
+    "Quacker", "Rapide", "Twinkle Star",
+    "Magicruiser", "Nitrocycle", "Torpedo",
+    "Bubble Bike", "Dolphin Dasher", "Phantom",
+]
+
+
 # Combine all items
 item_table: Dict[str, ItemData] = {
     **CUP_CC_ITEMS,
     **MODE_ITEMS,
     **CHARACTER_ITEMS,
+    **DEFAULT_CHARACTER_ITEMS,
     **KART_ITEMS,
+    **DEFAULT_KART_ITEMS,
     **BIKE_ITEMS,
+    **DEFAULT_BIKE_ITEMS,
     **POWERUP_ITEMS,
     **TRAP_ITEMS,
     **FILLER_ITEMS,
@@ -213,11 +321,11 @@ def get_item_group(item_name: str) -> str:
         return "Cup Unlocks"
     elif item_name in MODE_ITEMS:
         return "Mode Unlocks"
-    elif item_name in CHARACTER_ITEMS:
+    elif item_name in CHARACTER_ITEMS or item_name in DEFAULT_CHARACTER_ITEMS:
         return "Characters"
-    elif item_name in KART_ITEMS:
+    elif item_name in KART_ITEMS or item_name in DEFAULT_KART_ITEMS:
         return "Karts"
-    elif item_name in BIKE_ITEMS:
+    elif item_name in BIKE_ITEMS or item_name in DEFAULT_BIKE_ITEMS:
         return "Bikes"
     elif item_name in POWERUP_ITEMS:
         return "Powerups"

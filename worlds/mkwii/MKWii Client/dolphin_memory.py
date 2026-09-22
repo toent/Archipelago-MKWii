@@ -16,17 +16,32 @@ RaceConfig cup locking (PAL):
     RaceConfig pointer:     0x809BD728 (points to MEM2)
     Selected cup:           RaceConfig + 0x177B (u8, cup ID 0-7)
     Selected course:        RaceConfig + 0x175B (u8, track ID)
-    CC setting:             RaceConfig + 0x175F (u8, 0=50cc 1=100cc 2=150cc)
-    Mirror flag:            RaceConfig + 0x1783 (u8, 1=mirror)
+    CC setting:              RaceConfig + 0x175F (u8, 0=50cc 1=100cc 2=150cc)
+    Mirror flag:             RaceConfig + 0x1783 (u8, 1=mirror)
 
 Base cups (Mushroom, Flower, Shell, Banana) have no save-file unlock bits.
 They are blocked at runtime by overwriting the RaceConfig cup/course fields
 to redirect the player to an unlocked cup.
 
+RaceConfig character/vehicle locking (PAL):
+    Menu scenario vehicle:   RaceConfig + 0xC20 (u32, vehicle ID 0-35)
+    Menu scenario character: RaceConfig + 0xC24 (u32, character ID 0-23)
+
+The menu scenario holds the pending character/vehicle pick while the player
+is on the character/vehicle select screens, and reads 0xFFFFFFFF before
+anything has been picked. It is copied once into the race scenario
+(RaceConfig + 0x30 vehicle, + 0x34 character) at race load, after which the
+menu scenario copy is inert. Default characters and vehicles have no save
+bits, same as the base cups, and are blocked by overwriting the menu
+scenario fields before the race loads. Unlike cup locking, no OK-screen
+timing is needed: there is enough real time between character/vehicle
+select and the race loading for a 0.5s poll tick to always land first.
+
 All bit offsets verified against 25 progressive PAL save snapshots.
 RaceConfig offsets verified via memory snapshot diffing.
 """
 import logging
+import random
 import struct
 from typing import Dict, Optional, Set, Tuple
 
@@ -68,6 +83,12 @@ RACECONFIG_CUP_OFFSET    = 0x177B  # u8: selected cup ID (0-7)
 RACECONFIG_COURSE_OFFSET = 0x175B  # u8: selected track ID
 RACECONFIG_CC_OFFSET     = 0x175F  # u8: 0=50cc, 1=100cc, 2=150cc
 RACECONFIG_MIRROR_OFFSET = 0x1783  # u8: 1=mirror
+
+# RaceConfig menu-scenario addresses (for character/vehicle locking).
+# See module docstring for the copy-into-race-scenario timing.
+MENU_VEHICLE_OFFSET   = 0xC20  # u32: pending vehicle ID (0-35)
+MENU_CHARACTER_OFFSET = 0xC24  # u32: pending character ID (0-23)
+UNSET_SELECTION       = 0xFFFFFFFF
 
 # Cup ID to name mapping
 CUP_ID_TO_NAME: Dict[int, str] = {
@@ -216,7 +237,7 @@ _VEHICLE_ALIASES: Set[frozenset] = {
     frozenset({"Torpedo", "Spear"}),
     frozenset({"Baby Booster", "Booster Seat"}),
     frozenset({"Nostalgia 1", "Classic Dragster"}),
-    frozenset({"Concerto", "Wild Wing"}),
+    frozenset({"Concerto", "Mini Beast"}),
     frozenset({"Bowser Bike", "Flame Runner"}),
     frozenset({"Nanobike", "Bit Bike"}),
     frozenset({"Bon Bon", "Sugarscoot"}),
@@ -229,6 +250,166 @@ def get_vehicle_alternates(vehicle_name: str) -> Set[str]:
         if vehicle_name in group:
             return set(group)
     return {vehicle_name}
+
+
+# Character/vehicle ID tables (for RaceConfig character/vehicle locking).
+# Keyed/valued by the same PAL names used throughout this file and in the
+# apworld's items.py, so no separate translation layer is needed elsewhere.
+
+CHARACTER_ID_TO_NAME: Dict[int, str] = {
+    0x00: "Mario", 0x01: "Baby Peach", 0x02: "Waluigi", 0x03: "Bowser",
+    0x04: "Baby Daisy", 0x05: "Dry Bones", 0x06: "Baby Mario", 0x07: "Luigi",
+    0x08: "Toad", 0x09: "Donkey Kong", 0x0A: "Yoshi", 0x0B: "Wario",
+    0x0C: "Baby Luigi", 0x0D: "Toadette", 0x0E: "Koopa Troopa", 0x0F: "Daisy",
+    0x10: "Peach", 0x11: "Birdo", 0x12: "Diddy Kong", 0x13: "King Boo",
+    0x14: "Bowser Jr.", 0x15: "Dry Bowser", 0x16: "Funky Kong", 0x17: "Rosalina",
+}
+CHARACTER_NAME_TO_ID: Dict[str, int] = {v: k for k, v in CHARACTER_ID_TO_NAME.items()}
+
+VEHICLE_ID_TO_NAME: Dict[int, str] = {
+    0x00: "Standard Kart S", 0x01: "Standard Kart M", 0x02: "Standard Kart L",
+    0x03: "Baby Booster", 0x04: "Nostalgia 1", 0x05: "Offroader",
+    0x06: "Concerto", 0x07: "Wild Wing", 0x08: "Flame Flyer",
+    0x09: "Cheep Charger", 0x0A: "Turbo Blooper", 0x0B: "Piranha Prowler",
+    0x0C: "Rally Romper", 0x0D: "Royal Racer", 0x0E: "Aero Glider",
+    0x0F: "Blue Falcon", 0x10: "B. Dasher Mk 2", 0x11: "Dragonetti",
+    0x12: "Standard Bike S", 0x13: "Standard Bike M", 0x14: "Standard Bike L",
+    0x15: "Bullet Bike", 0x16: "Mach Bike", 0x17: "Bowser Bike",
+    0x18: "Nanobike", 0x19: "Bon Bon", 0x1A: "Wario Bike",
+    0x1B: "Quacker", 0x1C: "Rapide", 0x1D: "Twinkle Star",
+    0x1E: "Magicruiser", 0x1F: "Nitrocycle", 0x20: "Torpedo",
+    0x21: "Bubble Bike", 0x22: "Dolphin Dasher", 0x23: "Phantom",
+}
+
+# Includes every PAL/US alias for each vehicle, so a name pulled from either
+# unlocked_karts or unlocked_bikes (which store all alias forms) resolves.
+VEHICLE_NAME_TO_ID: Dict[str, int] = {}
+for _vid, _vname in VEHICLE_ID_TO_NAME.items():
+    for _alt in get_vehicle_alternates(_vname):
+        VEHICLE_NAME_TO_ID[_alt] = _vid
+
+# 0 small, 1 medium, 2 large, indexed by character ID (0-23). Derived from
+# Vega's "Random Character+Vehicle For Every Race" Gecko code lookup table
+# and cross-checked live in-game against Peach (0x10, medium) and
+# Funky Kong (0x16, large).
+_CHARACTER_CLASS_BY_ID = [
+    1, 0, 2, 2, 0, 0, 0, 1, 0, 2, 1, 2, 0, 0, 0, 1, 1, 1, 1, 2, 1, 2, 2, 2,
+]
+_WEIGHT_CLASS_NAMES = ["Small", "Medium", "Large"]
+
+
+def character_weight_class(character_id: int) -> Optional[str]:
+    """Return "Small"/"Medium"/"Large" for a character ID, or None if out
+    of range (e.g. a Mii ID, which has no fixed weight class)."""
+    if 0 <= character_id < len(_CHARACTER_CLASS_BY_ID):
+        return _WEIGHT_CLASS_NAMES[_CHARACTER_CLASS_BY_ID[character_id]]
+    return None
+
+
+def vehicle_weight_class(vehicle_id: int) -> Optional[str]:
+    """Return "Small"/"Medium"/"Large" for a vehicle ID. Every group of
+    three consecutive vehicle IDs cycles Small/Medium/Large, for both karts
+    (0x00-0x11) and bikes (0x12-0x23), so this is id % 3."""
+    if 0 <= vehicle_id <= 0x23:
+        return _WEIGHT_CLASS_NAMES[vehicle_id % 3]
+    return None
+
+
+def vehicle_is_bike(vehicle_id: int) -> bool:
+    """Karts are 0x00-0x11, bikes are 0x12-0x23."""
+    return vehicle_id >= 0x12
+
+
+def vehicle_type_allowed(vehicle_id: int, cc: Optional[str], unlocked_modes: Set[str]) -> bool:
+    """MKWii restricts vehicle type by CC in vanilla: 50cc is karts only,
+    100cc is bikes only. Each restriction lifts once the matching mode item
+    ("50cc Karts/Bikes" / "100cc Karts/Bikes") is unlocked, after which both
+    types are allowed. 150cc and Mirror always allow both, no restriction.
+
+    cc=None (unresolved) is treated as unrestricted rather than blocking a
+    combo on a momentary read failure; the poll loop re-checks continuously
+    up to race load, so a stale/missing CC read self-corrects on a later
+    tick rather than needing to be exactly right here.
+    """
+    if cc is None:
+        return True
+    is_bike = vehicle_is_bike(vehicle_id)
+    if cc == "50cc":
+        return (not is_bike) or ("50cc Karts/Bikes" in unlocked_modes)
+    if cc == "100cc":
+        return is_bike or ("100cc Karts/Bikes" in unlocked_modes)
+    return True
+
+
+def resolve_combo(
+    character_id: int,
+    vehicle_id: int,
+    unlocked_character_ids: Set[int],
+    unlocked_vehicle_ids: Set[int],
+    cc: Optional[str] = None,
+    unlocked_modes: Optional[Set[str]] = None,
+    rng=random,
+) -> Optional[Tuple[int, int]]:
+    """Return a legal (character_id, vehicle_id) pair given what's currently
+    selected and what's unlocked, or None if no legal combo exists at all
+    (caller should fall back to freezing laps rather than write nothing).
+
+    Legality is weight class (small/medium/large must match) AND vehicle
+    type (kart/bike must be allowed on the current CC, see
+    vehicle_type_allowed). cc and unlocked_modes are optional so existing
+    callers/tests that only care about weight class still work; omitting
+    them means every vehicle type is treated as allowed.
+
+    Preference order: keep the combo if it's already legal, then fix only
+    the vehicle if the character is legal, then fix only the character if
+    the vehicle is legal, then fall back to a full random legal combo,
+    preferring the player's original weight class if possible.
+    """
+    unlocked_modes = unlocked_modes or set()
+
+    def vehicle_legal(v: int) -> bool:
+        return v in unlocked_vehicle_ids and vehicle_type_allowed(v, cc, unlocked_modes)
+
+    char_class = character_weight_class(character_id)
+    char_ok = char_class is not None and character_id in unlocked_character_ids
+    veh_class = vehicle_weight_class(vehicle_id)
+    veh_ok = veh_class is not None and vehicle_legal(vehicle_id)
+
+    if char_ok and veh_ok and veh_class == char_class:
+        return character_id, vehicle_id
+
+    if char_ok:
+        legal_vehicles = [
+            v for v in unlocked_vehicle_ids
+            if vehicle_weight_class(v) == char_class and vehicle_type_allowed(v, cc, unlocked_modes)
+        ]
+        if legal_vehicles:
+            return character_id, rng.choice(legal_vehicles)
+
+    if veh_ok:
+        legal_chars = [
+            c for c in unlocked_character_ids if character_weight_class(c) == veh_class
+        ]
+        if legal_chars:
+            return rng.choice(legal_chars), vehicle_id
+
+    options = []
+    for c in unlocked_character_ids:
+        cls = character_weight_class(c)
+        if cls is None:
+            continue
+        vehicles = [
+            v for v in unlocked_vehicle_ids
+            if vehicle_weight_class(v) == cls and vehicle_type_allowed(v, cc, unlocked_modes)
+        ]
+        if vehicles:
+            options.append((c, cls, vehicles))
+    if not options:
+        return None
+
+    same_class = [o for o in options if o[1] == char_class]
+    new_char, _, vehicles = rng.choice(same_class or options)
+    return new_char, rng.choice(vehicles)
 
 
 # Dolphin Memory Manager
@@ -560,6 +741,54 @@ class DolphinMemoryManager:
                 return False
             dme.write_bytes(base + RACECONFIG_CUP_OFFSET, struct.pack(">B", target_cup_id))
             dme.write_bytes(base + RACECONFIG_COURSE_OFFSET, struct.pack(">B", target_track))
+            return True
+        except Exception:
+            return False
+
+    # RaceConfig menu-scenario character/vehicle reading/writing
+    # (for default character/vehicle locking)
+
+    def read_menu_character(self) -> Optional[int]:
+        """Read the pending character ID from RaceConfig's menu scenario.
+
+        Returns None if nothing has been picked yet (character/vehicle
+        select screens aren't active) or on failure.
+        """
+        try:
+            base = self._read_rc_base()
+            if base == 0:
+                return None
+            value = struct.unpack(">I", dme.read_bytes(base + MENU_CHARACTER_OFFSET, 4))[0]
+            return None if value == UNSET_SELECTION else value
+        except Exception:
+            return None
+
+    def read_menu_vehicle(self) -> Optional[int]:
+        """Read the pending vehicle ID from RaceConfig's menu scenario.
+
+        Returns None if nothing has been picked yet or on failure.
+        """
+        try:
+            base = self._read_rc_base()
+            if base == 0:
+                return None
+            value = struct.unpack(">I", dme.read_bytes(base + MENU_VEHICLE_OFFSET, 4))[0]
+            return None if value == UNSET_SELECTION else value
+        except Exception:
+            return None
+
+    def write_menu_combo(self, character_id: int, vehicle_id: int) -> bool:
+        """Overwrite the pending character and vehicle in RaceConfig's menu
+        scenario, before they get copied into the race scenario at load.
+
+        Returns True if the write succeeded.
+        """
+        try:
+            base = self._read_rc_base()
+            if base == 0:
+                return False
+            dme.write_bytes(base + MENU_CHARACTER_OFFSET, struct.pack(">I", character_id))
+            dme.write_bytes(base + MENU_VEHICLE_OFFSET, struct.pack(">I", vehicle_id))
             return True
         except Exception:
             return False
