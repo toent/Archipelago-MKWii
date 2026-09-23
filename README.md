@@ -45,11 +45,11 @@ presently, Archipelago is also the randomizer itself.
 - Functional, useful filler items.
 - Individual race location checks.
 - Default unlocked cup/track blocking.
+- Default unlocked characters, vehicle blocking.
 
 **What features are *not* currently available (but are planned for the future)?**
 - Traps.
 - Time trials location checks.
-- Default unlocked characters, vehicle blocking.
 - Overlay system for displaying character, vehicle, and cup availability.
 
 ### Version Information:
