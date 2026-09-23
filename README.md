@@ -54,10 +54,11 @@ presently, Archipelago is also the randomizer itself.
 
 ### Version Information:
 Let me touch on how I will be naming versions and updates:
-- Hotfixes: 0.0.0-h*x* update.
-- Small update with minor features/fixes: 0.0.*x* update.
-- Big update with major new features: 0.*x*.0 update.
-- Full "out of beta release" or full rewrites: *x*.0.0 update.
+- Hotfixes: v0.0.0-h*x* update.
+- Pre-Releases (untested): pre*x*.*x*.*x* update.
+- Small update with minor features/fixes: v0.0.*x* update.
+- Big update with major new features: v0.*x*.0 update.
+- Full "out of beta release" or full rewrites: v*x*.0.0 update.
 
 ## Arcipelago History
 
