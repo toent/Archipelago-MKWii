@@ -6,7 +6,7 @@ presently, Archipelago is also the randomizer itself.
 ## MKWii
 ### Things you will need:
 * An **unmodified PAL** Mario Kart Wii ROM
-* [Dolphin 2512+](https://dolphin-emu.org/download/release/2512/) (Dolphin 5 or higher is the minimum)
+* [Dolphin 2512+](https://dolphin-emu.org/download/release/2512/) (Dolphin 5.0-3981 or higher is the minimum)
 * [Latest MKWii Client and APWorld Release](https://github.com/toent/Archipelago-MKWii/releases/latest)
 * LINUX ONLY [Python 3.13.12](https://www.python.org/downloads/release/python-31312/) and [Git](https://git-scm.com/install/) are needed
 
