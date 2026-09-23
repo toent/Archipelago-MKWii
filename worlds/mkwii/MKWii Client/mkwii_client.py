@@ -23,6 +23,20 @@ Cup locking strategy:
     cup is selected. The player gets redirected to an unlocked cup in the
     same CC, or if none are available, the race starts but laps are frozen.
 
+Character/vehicle locking strategy:
+  - Characters and karts/bikes with save-file bits are locked via the
+    existing bit-clear mechanism (same as cups).
+  - Default characters/vehicles (unlocked in vanilla) have no save bits.
+    When the corresponding lock_default_* option is on, one or two are
+    pre-granted by the seed as starting picks and the rest are locked via
+    RaceConfig menu-scenario redirect, mirroring the base cup mechanism.
+    When the option is off, every default in that category is unlocked
+    from the start and seeded directly, since none of them ever arrive
+    as AP items.
+  - Unlike cup locking, no OK-screen timing is needed: there's enough real
+    time between character/vehicle select and the race loading for a 0.5s
+    poll tick to always land before the race scenario copy happens.
+
 Expected directory layout:
     Archipelago/
         CommonClient.py, NetUtils.py, ...
@@ -67,6 +81,8 @@ from dolphin_memory import (
     CHARACTER_IDS, VEHICLE_IDS, CUP_UNLOCK_IDS, MODE_IDS, ALL_UNLOCK_IDS,
     CUP_TROPHY_IDS, DolphinMemoryManager, get_vehicle_alternates,
     CUP_NAME_TO_ID, CUP_ID_TO_NAME, BASE_CUP_NAMES, TRACK_TO_CUP,
+    CHARACTER_ID_TO_NAME, CHARACTER_NAME_TO_ID,
+    VEHICLE_ID_TO_NAME, VEHICLE_NAME_TO_ID, resolve_combo,
 )
 from item_slot_manager import ItemSlotManager, AP_TO_GAME
 from tracker import launch_tracker
@@ -289,6 +305,53 @@ class MKWiiContext(CommonContext):
                 console_logger.info(f"Starting cup: {item_name}")
                 _report_handler(f"INFO: Starting cup: {item_name}", self.dolphin_mgr)
 
+            # Load default character/vehicle locking state and seed the
+            # unlocked sets. Default characters/vehicles never arrive as
+            # AP items when their lock_default_* option is off, so they
+            # must be seeded here directly rather than waiting for
+            # ReceivedItems. When the option is on, only the seed's
+            # starting picks are seeded; the rest arrive as normal items.
+            lock_chars = self.slot_data.get("lock_default_characters", True)
+            lock_vehicles = self.slot_data.get("lock_default_vehicles", True)
+
+            if lock_chars:
+                for char in self.slot_data.get("starting_characters", []):
+                    self.unlocked_characters.add(char)
+                    console_logger.info(f"Starting character: {char}")
+                    _report_handler(f"INFO: Starting character: {char}", self.dolphin_mgr)
+            else:
+                from worlds.mkwii.items import DEFAULT_CHARACTER_ITEMS
+                for name in DEFAULT_CHARACTER_ITEMS:
+                    self.unlocked_characters.add(name.replace("Character: ", "", 1))
+                console_logger.info("Default character locking off: all default characters unlocked")
+                _report_handler(
+                    "INFO: Default character locking off: all default characters unlocked",
+                    self.dolphin_mgr
+                )
+
+            if lock_vehicles:
+                starting_kart = self.slot_data.get("starting_kart")
+                starting_bike = self.slot_data.get("starting_bike")
+                if starting_kart:
+                    self.unlocked_karts.update(get_vehicle_alternates(starting_kart))
+                    console_logger.info(f"Starting kart: {starting_kart}")
+                    _report_handler(f"INFO: Starting kart: {starting_kart}", self.dolphin_mgr)
+                if starting_bike:
+                    self.unlocked_bikes.update(get_vehicle_alternates(starting_bike))
+                    console_logger.info(f"Starting bike: {starting_bike}")
+                    _report_handler(f"INFO: Starting bike: {starting_bike}", self.dolphin_mgr)
+            else:
+                from worlds.mkwii.items import DEFAULT_KART_ITEMS, DEFAULT_BIKE_ITEMS
+                for name in DEFAULT_KART_ITEMS:
+                    self.unlocked_karts.update(get_vehicle_alternates(name.replace("Kart: ", "", 1)))
+                for name in DEFAULT_BIKE_ITEMS:
+                    self.unlocked_bikes.update(get_vehicle_alternates(name.replace("Bike: ", "", 1)))
+                console_logger.info("Default vehicle locking off: all default vehicles unlocked")
+                _report_handler(
+                    "INFO: Default vehicle locking off: all default vehicles unlocked",
+                    self.dolphin_mgr
+                )
+
             self._build_location_lookup()
             self._populate_tracker_from_checked()
 
@@ -366,7 +429,14 @@ class MKWiiContext(CommonContext):
         )
 
     def _process_item(self, item_name: str, sender_player: int = 0, location_id: int = 0) -> None:
-        """Route a received item to the appropriate unlock set / item slot queue."""
+        """Route a received item to the appropriate unlock set / item slot queue.
+
+        Character/Kart/Bike items are handled generically here regardless of
+        whether they have a real save-file bit: default characters/vehicles
+        (no save bit) still populate unlocked_characters/karts/bikes for
+        RaceConfig menu-scenario redirect, and _apply_unlock safely no-ops
+        on names with no ALL_UNLOCK_IDS entry.
+        """
         if item_name == "Victory Trophy":
             # Counted from items_received in _update_victory_goal
             pass
@@ -588,6 +658,7 @@ class MKWiiContext(CommonContext):
                 await self.dolphin.async_patch_vanilla_unlock_block()
                 await self._block_vanilla_unlocks()
                 self._enforce_cup_locks()
+                self._enforce_character_vehicle_lock()
                 await self.check_locations()
 
                 # Item slot injection + race check
@@ -738,6 +809,89 @@ class MKWiiContext(CommonContext):
 
         except Exception as e:
             console_logger.debug(f"Cup lock enforcement error: {e}")
+
+    # Character/vehicle lock enforcement (RaceConfig menu-scenario redirect)
+
+    def _enforce_character_vehicle_lock(self) -> None:
+        """Check the pending character/vehicle in RaceConfig's menu scenario
+        and correct an illegal combo before the race loads.
+
+        Unlike cup locking, this needs no OK-screen timing: character and
+        vehicle select happen well before the race loads, so a 0.5s poll
+        tick reliably lands before the copy into the race scenario. The
+        same applies to CC: even if CC is chosen after character/vehicle
+        in the menu flow and read_selected_cc() is momentarily stale or
+        unresolved while still on those screens, the poll keeps re-checking
+        every tick up until the race scenario copy happens, so it corrects
+        itself once CC is actually finalized.
+
+        Legality includes both weight class (small/medium/large) and
+        vehicle type: 50cc is kart-only and 100cc is bike-only in vanilla,
+        lifted by the "50cc Karts/Bikes" / "100cc Karts/Bikes" items. See
+        resolve_combo and vehicle_type_allowed in dolphin_memory.py.
+
+        mMenuScenario reads as unset (None from the read helpers) until the
+        player has actually picked something, so this is a no-op outside
+        the character/vehicle select flow.
+
+        If no legal combo exists at all given the current unlocked sets,
+        the illegal pick is left alone rather than force-changed to
+        something arbitrary. This shouldn't happen in practice: at least
+        one legal combo is always guaranteed at generation, either via the
+        starting character/kart/bike picks (locking on) or the full set of
+        defaults being available (locking off). If it ever does happen,
+        the race could still crash on a genuine weight-class mismatch;
+        that would need a race-level fallback (freezing laps, same as the
+        cup lock's Layer 2) which isn't wired up here yet.
+        """
+        if not self.dolphin or not self.dolphin.is_connected:
+            return
+
+        try:
+            character_id = self.dolphin.read_menu_character()
+            vehicle_id = self.dolphin.read_menu_vehicle()
+            if character_id is None or vehicle_id is None:
+                return
+
+            unlocked_character_ids = {
+                CHARACTER_NAME_TO_ID[name]
+                for name in self.unlocked_characters
+                if name in CHARACTER_NAME_TO_ID
+            }
+            unlocked_vehicle_ids = {
+                VEHICLE_NAME_TO_ID[name]
+                for name in (self.unlocked_karts | self.unlocked_bikes)
+                if name in VEHICLE_NAME_TO_ID
+            }
+
+            cc = self.dolphin.read_selected_cc()
+
+            result = resolve_combo(
+                character_id, vehicle_id, unlocked_character_ids, unlocked_vehicle_ids,
+                cc=cc, unlocked_modes=self.unlocked_modes,
+            )
+            if result is None:
+                return
+
+            new_character_id, new_vehicle_id = result
+            if new_character_id == character_id and new_vehicle_id == vehicle_id:
+                return
+
+            if self.dolphin.write_menu_combo(new_character_id, new_vehicle_id):
+                old_char = CHARACTER_ID_TO_NAME.get(character_id, "?")
+                old_veh = VEHICLE_ID_TO_NAME.get(vehicle_id, "?")
+                new_char = CHARACTER_ID_TO_NAME.get(new_character_id, "?")
+                new_veh = VEHICLE_ID_TO_NAME.get(new_vehicle_id, "?")
+                console_logger.info(
+                    f"Combo fix: {old_char}/{old_veh} -> {new_char}/{new_veh}"
+                )
+                _report_handler(
+                    f"INFO: Combo fix: {old_char}/{old_veh} -> {new_char}/{new_veh}",
+                    self.dolphin_mgr
+                )
+
+        except Exception as e:
+            console_logger.debug(f"Character/vehicle lock enforcement error: {e}")
 
     # Location checking
 
