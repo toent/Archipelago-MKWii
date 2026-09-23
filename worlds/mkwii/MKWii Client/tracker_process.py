@@ -308,6 +308,107 @@ def _slice_item_icons() -> None:
 
 _slice_item_icons()
 
+# Characters and vehicles. Names match the AP item names in worlds.mkwii.items
+# exactly (e.g. "Character: Mario" -> "Mario"), so no translation is needed
+# between item names and display names. Weight class here is the in-game
+# kart-compatibility class (small/medium/large), same table as
+# worlds.mkwii.items.CHARACTER_WEIGHT_CLASS / VEHICLE_WEIGHT_CLASS, not the
+# grouping used by the character_icons.png sprite sheet's own labels.
+CHARACTER_WEIGHT_CLASS: dict[str, str] = {
+    "Mario": "Medium", "Baby Peach": "Small", "Waluigi": "Large", "Bowser": "Large",
+    "Baby Daisy": "Small", "Dry Bones": "Small", "Baby Mario": "Small", "Luigi": "Medium",
+    "Toad": "Small", "Donkey Kong": "Large", "Yoshi": "Medium", "Wario": "Large",
+    "Baby Luigi": "Small", "Toadette": "Small", "Koopa Troopa": "Small", "Daisy": "Medium",
+    "Peach": "Medium", "Birdo": "Medium", "Diddy Kong": "Medium", "King Boo": "Large",
+    "Bowser Jr.": "Medium", "Dry Bowser": "Large", "Funky Kong": "Large", "Rosalina": "Large",
+}
+# Mii has no fixed weight class in-game, shown but not grouped by class.
+CHARACTERS = list(CHARACTER_WEIGHT_CLASS.keys()) + ["Mii Outfit A", "Mii Outfit B"]
+
+VEHICLE_WEIGHT_CLASS: dict[str, str] = {
+    "Standard Kart S": "Small", "Standard Kart M": "Medium", "Standard Kart L": "Large",
+    "Baby Booster": "Small", "Nostalgia 1": "Medium", "Offroader": "Large",
+    "Concerto": "Small", "Wild Wing": "Medium", "Flame Flyer": "Large",
+    "Cheep Charger": "Small", "Turbo Blooper": "Medium", "Piranha Prowler": "Large",
+    "Rally Romper": "Small", "Royal Racer": "Medium", "Aero Glider": "Large",
+    "Blue Falcon": "Small", "B. Dasher Mk 2": "Medium", "Dragonetti": "Large",
+    "Standard Bike S": "Small", "Standard Bike M": "Medium", "Standard Bike L": "Large",
+    "Bullet Bike": "Small", "Mach Bike": "Medium", "Bowser Bike": "Large",
+    "Nanobike": "Small", "Bon Bon": "Medium", "Wario Bike": "Large",
+    "Quacker": "Small", "Rapide": "Medium", "Twinkle Star": "Large",
+    "Magicruiser": "Small", "Nitrocycle": "Medium", "Torpedo": "Large",
+    "Bubble Bike": "Small", "Dolphin Dasher": "Medium", "Phantom": "Large",
+}
+KARTS = [
+    "Standard Kart S", "Standard Kart M", "Standard Kart L",
+    "Baby Booster", "Nostalgia 1", "Offroader",
+    "Concerto", "Wild Wing", "Flame Flyer",
+    "Cheep Charger", "Turbo Blooper", "Piranha Prowler",
+    "Rally Romper", "Royal Racer", "Aero Glider",
+    "Blue Falcon", "B. Dasher Mk 2", "Dragonetti",
+]
+BIKES = [
+    "Standard Bike S", "Standard Bike M", "Standard Bike L",
+    "Bullet Bike", "Mach Bike", "Bowser Bike",
+    "Nanobike", "Bon Bon", "Wario Bike",
+    "Quacker", "Rapide", "Twinkle Star",
+    "Magicruiser", "Nitrocycle", "Torpedo",
+    "Bubble Bike", "Dolphin Dasher", "Phantom",
+]
+WEIGHT_CLASSES = ["Small", "Medium", "Large"]
+
+_CHARACTER_SPRITESHEET = _HERE / "img" / "character_icons.png"
+
+# character_icons.png is a hand-laid-out reference sheet (Small/Medium/Large/Mii
+# sections as a visual aid for whoever built it), not a uniform grid, so
+# positions are pixel rows/cols measured directly rather than computed by
+# dividing width/height like the cup and item sheets. Grid is 4 rows x 8 cols;
+# the "Unused" and "Locked" sheet sections are skipped entirely.
+_CHARACTER_GRID_ROWS = [(13, 76), (79, 142), (158, 221), (224, 287)]
+_CHARACTER_GRID_COLS = [
+    (2, 65), (68, 131), (134, 197), (200, 263),
+    (268, 331), (334, 397), (400, 463), (466, 529),
+]
+_CHARACTER_GRID_POS: dict[str, tuple[int, int]] = {
+    "Baby Mario": (0, 0), "Baby Luigi": (0, 1), "Baby Peach": (0, 2), "Baby Daisy": (0, 3),
+    "Mario": (0, 4), "Luigi": (0, 5), "Peach": (0, 6), "Daisy": (0, 7),
+    "Toad": (1, 0), "Toadette": (1, 1), "Koopa Troopa": (1, 2), "Dry Bones": (1, 3),
+    "Yoshi": (1, 4), "Birdo": (1, 5), "Diddy Kong": (1, 6), "Bowser Jr.": (1, 7),
+    "Wario": (2, 0), "Waluigi": (2, 1), "Donkey Kong": (2, 2), "Bowser": (2, 3),
+    "Mii Outfit A": (2, 4), "Mii Outfit B": (2, 5),
+    "King Boo": (3, 0), "Rosalina": (3, 1), "Funky Kong": (3, 2), "Dry Bowser": (3, 3),
+}
+CHARACTER_ICON_PATHS: dict[str, str] = {}
+
+
+def _slice_character_icons() -> None:
+    """Slice character_icons.png into per-character temp PNGs.
+
+    Unlike the cup/item sheets, each cell is already a complete square
+    portrait with no background to strip, so this is a plain crop with no
+    floodfill pass.
+    """
+    if not _CHARACTER_SPRITESHEET.exists():
+        return
+    try:
+        from PIL import Image as PilImage
+        import tempfile
+        sheet = PilImage.open(str(_CHARACTER_SPRITESHEET)).convert("RGBA")
+        tmp_dir = Path(tempfile.mkdtemp(prefix="mkwii_characters_"))
+        for name, (row, col) in _CHARACTER_GRID_POS.items():
+            y0, y1 = _CHARACTER_GRID_ROWS[row]
+            x0, x1 = _CHARACTER_GRID_COLS[col]
+            crop = sheet.crop((x0, y0, x1, y1))
+            fname = name.lower().replace(" ", "_").replace(".", "") + ".png"
+            out = tmp_dir / fname
+            crop.save(str(out))
+            CHARACTER_ICON_PATHS[name] = str(out)
+    except Exception as e:
+        print(f"[Tracker] Character icon slice failed: {e}")
+
+
+_slice_character_icons()
+
 TIER_HIERARCHY = ["3rd_place", "2nd_place", "1st_place", "1_star", "2_star", "3_star"]
 
 TIER_NORMALIZE: dict[str, str] = {}
@@ -325,6 +426,9 @@ _state = {
     "track_locations":        {},
     "unlocked_items":         [],
     "unlocked_cups":          set(),
+    "unlocked_characters":    set(),
+    "unlocked_karts":         set(),
+    "unlocked_bikes":         set(),
     "include_race_checks":    True,
     "enable_item_randomization": True,
     "victory_trophies":          0,
@@ -345,6 +449,9 @@ def _read_state() -> dict:
             "track_locations":         dict(_state["track_locations"]),
             "unlocked_items":          list(_state["unlocked_items"]),
             "unlocked_cups":           set(_state["unlocked_cups"]),
+            "unlocked_characters":     set(_state["unlocked_characters"]),
+            "unlocked_karts":          set(_state["unlocked_karts"]),
+            "unlocked_bikes":          set(_state["unlocked_bikes"]),
             "include_race_checks":     _state["include_race_checks"],
             "enable_item_randomization": _state["enable_item_randomization"],
             "victory_trophies":          _state["victory_trophies"],
@@ -546,6 +653,47 @@ async def _ap_client_loop() -> None:
                 for cup_name, cc in starting_cups_data.items():
                     unlocked_cups.add(f"{cup_name} {cc}")
 
+                # Default characters/vehicles have no save bits and never
+                # arrive as items when their lock_default_* option is off,
+                # so they're seeded directly from slot_data, same as the
+                # client's on_package handling. When locking is on, only
+                # the starting picks are seeded; the rest arrive as items.
+                lock_chars    = slot_data.get("lock_default_characters", True)
+                lock_vehicles = slot_data.get("lock_default_vehicles", True)
+
+                unlocked_characters: set[str] = set()
+                if lock_chars:
+                    for char in slot_data.get("starting_characters", []):
+                        unlocked_characters.add(char)
+                else:
+                    # CHARACTERS mixes both tiers; only the 12 defaults are
+                    # unlocked here, the save-bit tier still needs items.
+                    unlocked_characters = {
+                        "Mario", "Luigi", "Peach", "Yoshi", "Toad", "Koopa Troopa",
+                        "Bowser", "Donkey Kong", "Wario", "Waluigi", "Baby Mario", "Baby Peach",
+                    }
+
+                unlocked_karts: set[str] = set()
+                unlocked_bikes: set[str] = set()
+                if lock_vehicles:
+                    starting_kart = slot_data.get("starting_kart")
+                    starting_bike = slot_data.get("starting_bike")
+                    if starting_kart:
+                        unlocked_karts.add(starting_kart)
+                    if starting_bike:
+                        unlocked_bikes.add(starting_bike)
+                else:
+                    unlocked_karts = {
+                        "Standard Kart S", "Standard Kart M", "Standard Kart L",
+                        "Baby Booster", "Nostalgia 1", "Concerto", "Wild Wing",
+                        "Offroader", "Flame Flyer",
+                    }
+                    unlocked_bikes = {
+                        "Standard Bike S", "Standard Bike M", "Standard Bike L",
+                        "Bullet Bike", "Nanobike", "Bon Bon", "Mach Bike",
+                        "Bowser Bike", "Wario Bike",
+                    }
+
                 for loc_id in checked_ids:
                     name = id_to_name.get(loc_id)
                     if not name:
@@ -567,6 +715,12 @@ async def _ap_client_loop() -> None:
                             # Cup unlock items: "{Cup Name} {cc}" e.g. "Mushroom Cup 50cc"
                             if "Cup" in iname and ("cc" in iname.lower() or "mirror" in iname.lower()):
                                 unlocked_cups.add(iname)
+                            if iname.startswith("Character: "):
+                                unlocked_characters.add(iname[len("Character: "):])
+                            elif iname.startswith("Kart: "):
+                                unlocked_karts.add(iname[len("Kart: "):])
+                            elif iname.startswith("Bike: "):
+                                unlocked_bikes.add(iname[len("Bike: "):])
 
                 _update_state(
                     connected=True,
@@ -574,6 +728,9 @@ async def _ap_client_loop() -> None:
                     track_locations=track_locs,
                     unlocked_items=unlocked_items,
                     unlocked_cups=unlocked_cups,
+                    unlocked_characters=unlocked_characters,
+                    unlocked_karts=unlocked_karts,
+                    unlocked_bikes=unlocked_bikes,
                     include_race_checks=include_race,
                     enable_item_randomization=enable_items,
                     victory_trophies=victory_trophies,
@@ -609,6 +766,21 @@ async def _ap_client_loop() -> None:
                                     if iname not in unlocked_cups:
                                         unlocked_cups.add(iname)
                                         changed = True
+                                if iname.startswith("Character: "):
+                                    name = iname[len("Character: "):]
+                                    if name not in unlocked_characters:
+                                        unlocked_characters.add(name)
+                                        changed = True
+                                elif iname.startswith("Kart: "):
+                                    name = iname[len("Kart: "):]
+                                    if name not in unlocked_karts:
+                                        unlocked_karts.add(name)
+                                        changed = True
+                                elif iname.startswith("Bike: "):
+                                    name = iname[len("Bike: "):]
+                                    if name not in unlocked_bikes:
+                                        unlocked_bikes.add(name)
+                                        changed = True
 
                         elif cmd == "RoomUpdate":
                             new_checked = m.get("checked_locations", [])
@@ -629,6 +801,9 @@ async def _ap_client_loop() -> None:
                             track_locations=track_locs,
                             unlocked_items=unlocked_items,
                             unlocked_cups=unlocked_cups,
+                            unlocked_characters=unlocked_characters,
+                            unlocked_karts=unlocked_karts,
+                            unlocked_bikes=unlocked_bikes,
                             victory_trophies=victory_trophies,
                             victory_trophies_required=trophies_required,
                         )
@@ -938,6 +1113,107 @@ class ItemCell:
                 self._icon_img.color = (0.35, 0.35, 0.35, 1)
 
 
+class CharacterCell:
+    # Icon size in dp, scales with display density, independent of cell pixel size
+    _ICON_DP = int(dp(46))
+    _LBL_H   = int(dp(22))
+
+    def __init__(self, name: str):
+        self._name = name
+        # size_hint=(1,1) so GridLayout sizes the cell; canvas callbacks keep bg/border correct
+        self.widget = FloatLayout(size_hint=(1, 1))
+        with self.widget.canvas.before:
+            self._bg_c = Color(*BG_CELL_EMPTY)
+            self._bg_r = Rectangle(size=(1, 1))
+            self._bd_c = Color(*BORDER_LIGHT)
+            self._bd_l = Line(rectangle=(0, 0, 1, 1), width=1)
+        self.widget.bind(pos=self._sync, size=self._sync)
+
+        icon_size = self._ICON_DP
+        if name in CHARACTER_ICON_PATHS:
+            self._icon_img = KvImage(
+                source=CHARACTER_ICON_PATHS[name],
+                size_hint=(None, None), size=(icon_size, icon_size),
+                allow_stretch=True, keep_ratio=True,
+                pos_hint={"center_x": 0.5, "center_y": 0.60})
+            self.widget.add_widget(self._icon_img)
+        else:
+            self._icon_img = None
+
+        self._name_lbl = Label(text=name, font_size=FS_SMALL, bold=True,
+                               color=list(TEXT_DIM),
+                               halign="center", valign="middle",
+                               pos_hint={"center_x": 0.5, "y": 0},
+                               size_hint=(1, None), height=self._LBL_H)
+        self._name_lbl.bind(size=self._name_lbl.setter("text_size"))
+        self.widget.add_widget(self._name_lbl)
+
+    def _sync(self, inst, _v):
+        x, y = inst.pos
+        w, h = inst.size
+        self._bg_r.pos  = (x, y)
+        self._bg_r.size = (w, h)
+        self._bd_l.rectangle = (x, y, w, h)
+        lbl_h = int(dp(22))
+        icon_sz = max(int(dp(24)), int(min(w, h - lbl_h) * 0.58))
+        if self._icon_img:
+            self._icon_img.size = (icon_sz, icon_sz)
+        self._name_lbl.font_size = FS_TEXT
+        self._name_lbl.height    = lbl_h
+
+    def set_unlocked(self, unlocked: bool):
+        if unlocked:
+            self._bg_c.rgba      = list(_hex4("#1a3a1a"))
+            self._bd_c.rgba      = list(BORDER_GLOW)
+            self._name_lbl.color = list((0.6, 1.0, 0.6, 1))
+            if self._icon_img:
+                self._icon_img.color = (1, 1, 1, 1)
+        else:
+            self._bg_c.rgba      = list(BG_CELL_EMPTY)
+            self._bd_c.rgba      = list(BORDER_LIGHT)
+            self._name_lbl.color = list(TEXT_DIM)
+            if self._icon_img:
+                self._icon_img.color = (0.35, 0.35, 0.35, 1)
+
+
+class VehicleCell:
+    """Text-only cell for the Vehicles tab: PAL name, no icon."""
+
+    def __init__(self, name: str):
+        self._name = name
+        self.widget = FloatLayout(size_hint=(1, 1))
+        with self.widget.canvas.before:
+            self._bg_c = Color(*BG_CELL_EMPTY)
+            self._bg_r = Rectangle(size=(1, 1))
+            self._bd_c = Color(*BORDER_LIGHT)
+            self._bd_l = Line(rectangle=(0, 0, 1, 1), width=1)
+        self.widget.bind(pos=self._sync, size=self._sync)
+        self._lbl = Label(text=name, font_size=FS_H4, bold=True,
+                          color=list(TEXT_DIM),
+                          halign="center", valign="middle",
+                          pos_hint={"center_x": 0.5, "center_y": 0.5},
+                          size_hint=(1, 1))
+        self._lbl.bind(size=self._lbl.setter("text_size"))
+        self.widget.add_widget(self._lbl)
+
+    def _sync(self, inst, _v):
+        x, y = inst.pos
+        w, h = inst.size
+        self._bg_r.pos  = (x, y)
+        self._bg_r.size = (w, h)
+        self._bd_l.rectangle = (x, y, w, h)
+
+    def set_unlocked(self, unlocked: bool):
+        if unlocked:
+            self._bg_c.rgba = list(_hex4("#1a3a1a"))
+            self._bd_c.rgba = list(BORDER_GLOW)
+            self._lbl.color = list((0.6, 1.0, 0.6, 1))
+        else:
+            self._bg_c.rgba = list(BG_CELL_EMPTY)
+            self._bd_c.rgba = list(BORDER_LIGHT)
+            self._lbl.color = list(TEXT_DIM)
+
+
 class TrackerApp(App):
 
     def build(self):
@@ -945,8 +1221,10 @@ class TrackerApp(App):
         self.cells         = {}
         self.tcells        = {}
         self.icells        = {}
+        self.ccells        = {}
+        self.vcells        = {}
         self._active_tab   = "Cups"
-        self._disabled_tabs: set[str] = {"Cups", "Tracks", "Items"}
+        self._disabled_tabs: set[str] = {"Cups", "Tracks", "Characters", "Vehicles", "Items"}
         self._was_connected: bool = False
 
         root = BoxLayout(orientation="vertical",
@@ -988,10 +1266,14 @@ class TrackerApp(App):
 
         # Eye toggle for showing/hiding server IP
         self._show_connection_details = False
+        # Height matches width (not TOP_BAR_H) so the touch hitbox stays a
+        # small square around the icon instead of stretching down into the
+        # tab bar below, which caused accidental eye-toggle clicks on tabs.
+        _EYE_BTN_SZ = int(dp(24))
         self._eye_btn = Label(
             text="👁‍🗨", font_name=_EMOJI_FONT,
             font_size=FS_H3, color=list(TEXT_DIM),
-            size_hint=(None, None), size=(int(dp(24)), TOP_BAR_H),
+            size_hint=(None, None), size=(_EYE_BTN_SZ, _EYE_BTN_SZ),
             pos_hint={"center_y": 0.5})
         self._eye_btn.bind(on_touch_down=self._on_eye_toggle)
 
@@ -1024,7 +1306,7 @@ class TrackerApp(App):
                             spacing=SPACING_UI)
         _paint_bg(tab_bar, BG_OUTER)
         self._tab_buttons = {}
-        for tab_name in ("Cups", "Tracks", "Items"):
+        for tab_name in ("Cups", "Tracks", "Characters", "Vehicles", "Items"):
             btn = self._make_tab_btn(tab_name, active=False, disabled=True)
             self._tab_buttons[tab_name] = btn
             tab_bar.add_widget(btn)
@@ -1037,9 +1319,11 @@ class TrackerApp(App):
         root.add_widget(self._content)
 
         self._panels = {
-            "Cups":   self._build_cups_panel(),
-            "Tracks": self._build_tracks_panel(),
-            "Items":  self._build_items_panel(),
+            "Cups":       self._build_cups_panel(),
+            "Tracks":     self._build_tracks_panel(),
+            "Characters": self._build_characters_panel(),
+            "Vehicles":   self._build_vehicles_panel(),
+            "Items":      self._build_items_panel(),
         }
 
         if _STANDALONE_MODE:
@@ -1328,6 +1612,76 @@ class TrackerApp(App):
         wrap.add_widget(grid)
         return wrap
 
+    # Characters panel
+
+    def _build_characters_panel(self):
+        COLS    = 6
+        SPACING = int(dp(4))
+        IPAD    = PAD
+
+        wrap = BoxLayout(orientation="vertical",
+                         padding=[IPAD, IPAD, IPAD, IPAD],
+                         size_hint=(1, 1))
+        _paint_bg(wrap, BG_CARD, BORDER_GLOW)
+
+        # Same "fill available space" approach as the Items panel: GridLayout
+        # divides the fixed card height across however many rows 26
+        # characters need at 6 cols (5 rows), rather than a fixed row count.
+        grid = GridLayout(cols=COLS, spacing=SPACING, padding=0,
+                          size_hint=(1, 1))
+
+        for name in CHARACTERS:
+            cell = CharacterCell(name)
+            self.ccells[name] = cell
+            grid.add_widget(cell.widget)
+
+        wrap.add_widget(grid)
+        return wrap
+
+    # Vehicles panel
+
+    def _build_vehicles_panel(self):
+        VCOLS = 4
+
+        scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False, do_scroll_y=True,
+                            bar_width=int(dp(6)), scroll_type=["bars", "content"])
+
+        outer = BoxLayout(orientation="vertical",
+                          padding=[PAD, PAD, PAD, PAD], spacing=SPACING_CELL,
+                          size_hint=(1, None))
+        _paint_bg(outer, BG_CARD, BORDER_GLOW)
+        outer.bind(minimum_height=outer.setter("height"))
+
+        SECTION_HDR_H = int(dp(36))
+        SECTION_HDR_PD = int(dp(2))
+
+        for weight_class in WEIGHT_CLASSES:
+            hdr = BoxLayout(orientation="horizontal", spacing=int(dp(6)),
+                            size_hint=(1, None), height=SECTION_HDR_H,
+                            padding=[PAD, SECTION_HDR_PD, PAD, SECTION_HDR_PD])
+            _paint_bg(hdr, BG_HEADER_ROW, BORDER_LIGHT)
+            hdr.add_widget(_label(weight_class, TEXT_YELLOW,
+                                  font_size=FS_H2, bold=True,
+                                  halign="left", size_hint=(1, 1)))
+            outer.add_widget(hdr)
+
+            names = (
+                [k for k in KARTS if VEHICLE_WEIGHT_CLASS[k] == weight_class]
+                + [b for b in BIKES if VEHICLE_WEIGHT_CLASS[b] == weight_class]
+            )
+            rows_needed = -(-len(names) // VCOLS)  # ceil division
+            grid_h = rows_needed * CELL_SIZE + (rows_needed - 1) * SPACING_CELL
+            grid = GridLayout(cols=VCOLS, spacing=SPACING_CELL, padding=0,
+                              size_hint=(1, None), height=grid_h)
+            for name in names:
+                cell = VehicleCell(name)
+                self.vcells[name] = cell
+                grid.add_widget(cell.widget)
+            outer.add_widget(grid)
+
+        scroll.add_widget(outer)
+        return scroll
+
     # tab enable/disable helper
 
     def _apply_tab_states(self, disabled: set) -> None:
@@ -1430,6 +1784,16 @@ class TrackerApp(App):
 
         for item_name, cell in self.icells.items():
             cell.set_unlocked(unlocked=(item_name in unlocked))
+
+        unlocked_characters = state["unlocked_characters"]
+        unlocked_karts      = state["unlocked_karts"]
+        unlocked_bikes      = state["unlocked_bikes"]
+
+        for name, cell in self.ccells.items():
+            cell.set_unlocked(unlocked=(name in unlocked_characters))
+
+        for name, cell in self.vcells.items():
+            cell.set_unlocked(unlocked=(name in unlocked_karts or name in unlocked_bikes))
 
 
 if __name__ == "__main__":
