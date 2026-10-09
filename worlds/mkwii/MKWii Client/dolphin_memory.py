@@ -833,6 +833,89 @@ class DolphinMemoryManager:
         except Exception:
             return False
 
+    # DeathLink (player 0 respawn timer and physics position)
+
+    _PLAYER_HOLDER_PTR_ADDR = 0x809C18F8
+    # Pointer walks in the same form as a DME pointer watch: read the pointer at
+    # the current address, add the offset, repeat. The last offset is the field.
+    _PRE_RESPAWN_PATH = (0x20, 0x0, 0x0, 0x30, 0x48)
+    _PLAYER_Y_PATH    = (0x20, 0x0, 0x0, 0x8, 0x90, 0x4, 0x6C)
+    _RACE_STAGE_PATH  = (0x28,)
+    _STAGE_RACING     = 2
+
+    @staticmethod
+    def _walk_pointers(base: int, offsets) -> Optional[int]:
+        """Follow a pointer chain and return the final field address, or None
+        if any pointer along the way is outside MEM1/MEM2."""
+        addr = base
+        for off in offsets:
+            ptr = struct.unpack(">I", dme.read_bytes(addr, 4))[0]
+            if not (0x80000000 <= ptr <= 0x817FFFFF or 0x90000000 <= ptr <= 0x93FFFFFF):
+                return None
+            addr = ptr + off
+        return addr
+
+    def read_pre_respawn_timer(self) -> Optional[int]:
+        """Read PlayerSub18.preRespawnTimer (s16) of player 0.
+
+        0 in normal driving, set to 150 when Lakitu starts a pickup and counts
+        down to 0. Returns None when no race is loaded or the walk fails.
+        """
+        try:
+            addr = self._walk_pointers(self._PLAYER_HOLDER_PTR_ADDR, self._PRE_RESPAWN_PATH)
+            if addr is None:
+                return None
+            return struct.unpack(">h", dme.read_bytes(addr, 2))[0]
+        except Exception:
+            return None
+
+    def write_pre_respawn_timer(self, frames: int) -> bool:
+        """Overwrite the pickup timer of player 0. Returns True on success."""
+        try:
+            addr = self._walk_pointers(self._PLAYER_HOLDER_PTR_ADDR, self._PRE_RESPAWN_PATH)
+            if addr is None:
+                return False
+            dme.write_bytes(addr, struct.pack(">h", frames))
+            return True
+        except Exception:
+            return False
+
+    def write_player_y(self, y: float) -> bool:
+        """Write the physics Y of player 0 (PlayerPhysics +0x6C). X and Z are
+        untouched, so the kart drops straight down from where it is."""
+        try:
+            addr = self._walk_pointers(self._PLAYER_HOLDER_PTR_ADDR, self._PLAYER_Y_PATH)
+            if addr is None:
+                return False
+            dme.write_bytes(addr, struct.pack(">f", y))
+            return True
+        except Exception:
+            return False
+
+    def read_p1_lap(self) -> int:
+        """Read P1's current lap (1-3 in a race, 4 once finished). Returns 0 on failure."""
+        try:
+            in_race, race_mgr = self.is_in_race()
+            if not in_race:
+                return 0
+            player_ptr = struct.unpack(">I", dme.read_bytes(race_mgr + self._PLAYER_ARRAY_OFFSET, 4))[0]
+            if 0x80000000 <= player_ptr <= 0x817FFFFF:
+                return struct.unpack(">B", dme.read_bytes(player_ptr + self._LAP_OFFSET, 1))[0]
+            return 0
+        except Exception:
+            return 0
+
+    def race_has_started(self) -> bool:
+        """True once Raceinfo.stage is 2 and P1 has not finished (lap 4)."""
+        try:
+            addr = self._walk_pointers(self._RACE_MGR_PTR_ADDR, self._RACE_STAGE_PATH)
+            if addr is None:
+                return False
+            stage = struct.unpack(">I", dme.read_bytes(addr, 4))[0]
+            return stage == self._STAGE_RACING and self.read_p1_lap() < 4
+        except Exception:
+            return False
+
     # Vanilla unlock block patch
 
     # Primary:   write li r3, -1 + blr (0x3860FFFF 4E800020) to 0x80854FA4

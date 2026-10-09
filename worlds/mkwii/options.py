@@ -2,8 +2,16 @@
 Options for Mario Kart Wii Archipelago World
 """
 from dataclasses import dataclass
-from Options import Choice, Range, OptionSet, PerGameCommonOptions, Toggle
+from Options import Choice, DeathLink, Range, OptionSet, PerGameCommonOptions, Toggle
 
+class DeathLinkRespawnTime(Range):
+    """How long Lakitu takes to pick you up after a received DeathLink, in tenths
+    of a second. 25 is the vanilla 2.5 seconds. Only applies when DeathLink is on.
+    Deaths you cause by falling off the track keep the vanilla pickup time."""
+    display_name = "DeathLink Respawn Time"
+    range_start = 10
+    range_end = 100
+    default = 25
 
 class EnabledCCs(OptionSet):
     """Which engine classes (CCs) generate location checks. (options: 50cc, 100cc, 150cc, Mirror)"""
@@ -295,6 +303,8 @@ class FillerWeightPOWBlock(Range):
 
 @dataclass
 class MKWiiOptions(PerGameCommonOptions):
+    death_link: DeathLink
+    death_link_respawn_time: DeathLinkRespawnTime
     enabled_ccs: EnabledCCs
     enabled_cup_check_tiers: EnabledCupCheckTiers
     include_race_checks: IncludeRaceChecks
