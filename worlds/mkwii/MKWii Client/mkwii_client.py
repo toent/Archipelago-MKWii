@@ -86,6 +86,7 @@ from dolphin_memory import (
 )
 from item_slot_manager import ItemSlotManager, AP_TO_GAME
 from tracker import launch_tracker
+from deathlink import DeathLinkBridge
 
 # Console logger for verbose output that should not appear in the AP GUI
 console_logger = logging.getLogger("MKWii.Console")
@@ -209,6 +210,10 @@ class MKWiiContext(CommonContext):
         # Item slot manager (created once room_id / seed is known)
         self._item_slot_mgr: Optional[ItemSlotManager] = None
 
+        # DeathLink bridge, only created when the slot has death_link on
+        self.deathlink: Optional[DeathLinkBridge] = None
+        self._deathlink_task: Optional[asyncio.Task] = None
+
     def _is_cup_unlocked_for_cc(self, cup_name: str, cc: str) -> bool:
         """Check if a specific cup is unlocked for a specific CC."""
         return f"{cup_name} {cc}" in self.unlocked_cups
@@ -257,6 +262,20 @@ class MKWiiContext(CommonContext):
             if loc_name.startswith(track) and f" {cc} - " in loc_name:
                 return True
         return False
+
+    def _deathlink_mem(self) -> Optional[DolphinMemoryManager]:
+        # The bridge only touches memory while hooked and not mid savestate load.
+        if self.dolphin and self.dolphin.is_connected and not self._loading_state:
+            return self.dolphin
+        return None
+
+    async def _send_natural_death(self) -> None:
+        await self.send_death(f"{self.player_names[self.slot]} fell off the track")
+
+    def on_deathlink(self, data: dict) -> None:
+        super().on_deathlink(data)
+        if self.deathlink:
+            self.deathlink.receive()
 
     async def server_auth(self, password_requested: bool = False) -> None:
         if password_requested and not self.password:
@@ -384,6 +403,16 @@ class MKWiiContext(CommonContext):
 
             if not self._memory_poll_task:
                 self._memory_poll_task = asyncio.create_task(self._poll_dolphin())
+
+            if self.slot_data.get("death_link"):
+                if self.deathlink is None:
+                    self.deathlink = DeathLinkBridge(self._send_natural_death, self._deathlink_mem)
+                self.deathlink.set_respawn_time(self.slot_data.get("death_link_respawn_time", 25))
+                asyncio.create_task(self.update_death_link(True))
+                if not self._deathlink_task:
+                    self._deathlink_task = asyncio.create_task(self.deathlink.run())
+                console_logger.info("DeathLink enabled")
+                _report_handler("INFO: DeathLink enabled", self.dolphin_mgr)
 
         elif cmd == "ReceivedItems":
             self._handle_received_items(args)
