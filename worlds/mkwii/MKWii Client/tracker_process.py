@@ -142,17 +142,31 @@ CUP_ICON_PATHS: dict[str, str] = {}
 
 def _remove_bg_floodfill(cell_arr, threshold: int = 15):
     """Remove background by flood-filling connected near-black regions from all edges."""
-    from scipy.ndimage import label as _label
     import numpy as _np
+    from collections import deque
     brightness = cell_arr[:, :, :3].astype(int).sum(axis=2)
     bg_candidate = brightness < threshold
-    labeled, _ = _label(bg_candidate)
-    border_labels: set = set()
-    for edge in (labeled[0, :], labeled[-1, :], labeled[:, 0], labeled[:, -1]):
-        border_labels.update(edge.flat)
-    border_labels.discard(0)
+    h, w = bg_candidate.shape
+    reached = _np.zeros((h, w), dtype=bool)
+    queue = deque()
+    for x in range(w):
+        for y in (0, h - 1):
+            if bg_candidate[y, x] and not reached[y, x]:
+                reached[y, x] = True
+                queue.append((y, x))
+    for y in range(h):
+        for x in (0, w - 1):
+            if bg_candidate[y, x] and not reached[y, x]:
+                reached[y, x] = True
+                queue.append((y, x))
+    while queue:
+        y, x = queue.popleft()
+        for ny, nx in ((y - 1, x), (y + 1, x), (y, x - 1), (y, x + 1)):
+            if 0 <= ny < h and 0 <= nx < w and bg_candidate[ny, nx] and not reached[ny, nx]:
+                reached[ny, nx] = True
+                queue.append((ny, nx))
     result = cell_arr.copy()
-    result[_np.isin(labeled, list(border_labels)), 3] = 0
+    result[reached, 3] = 0
     return result
 
 
