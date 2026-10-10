@@ -46,11 +46,13 @@ presently, Archipelago is also the randomizer itself.
 - Individual race location checks.
 - Default unlocked cup/track blocking.
 - Default unlocked characters, vehicle blocking.
+- Death link by falling of track.
 
 **What features are *not* currently available (but are planned for the future)?**
 - Traps.
 - Time trials location checks.
 - Overlay system for displaying character, vehicle, and cup availability.
+- Death link amnesty.
 
 ### Version Information:
 Let me touch on how I will be naming versions and updates:
