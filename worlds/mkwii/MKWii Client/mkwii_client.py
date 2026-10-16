@@ -418,7 +418,7 @@ class MKWiiContext(CommonContext):
                 asyncio.create_task(self.update_death_link(True))
                 if not self._deathlink_task:
                     self._deathlink_task = asyncio.create_task(self.deathlink.run())
-                self.reporter.report(type="INFO" msg= f"DeathLink enabled, amnesty: {amnesty}")
+                self.reporter.report(type="INFO", msg= f"DeathLink enabled, amnesty: {amnesty}")
 
         elif cmd == "ReceivedItems":
             self._handle_received_items(args)
