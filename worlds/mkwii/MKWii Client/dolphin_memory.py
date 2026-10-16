@@ -42,27 +42,21 @@ RaceConfig offsets verified via memory snapshot diffing.
 """
 import logging
 import random
-import struct
 from typing import Dict, Optional, Set, Tuple
 
 import dolphin_memory_engine as dme
 import asyncio
 from dolphin_manager import DolphinManager
-from reporting import report_handler as _report_handler
+from dme_helpers import (
+    F32, S16, U8, U32,
+    base_address, constant, is_valid_ptr, read_named, read_u8, read_u32, resolve, write_named, write_u8,
+)
+from reporting import ReportHandler
 
 logger = logging.getLogger("MKWii.Memory")
 
-# PAL memory addresses
-
-SYSTEM_MANAGER_PTR = 0x809BD748
-RAW_SAVE_OFFSET = 0x14
-RUNTIME_UNLOCK_OFFSET = 0x9034
-RUNTIME_LICENSE_STRIDE = 0x93F0
-SAVE_LICENSE_STRIDE = 0x8CC0
-
-# Unlock bytes span 0x0038..0x003F in the per-license save block
-SAVE_UNLOCK_START = 0x0038
-UNLOCK_BYTE_COUNT = 8
+# Addresses, pointer chains and layout constants live in dme_addresses.py.
+# Unlock bytes span 0x0038..0x003F in the per-license save block.
 
 # Per-license base offsets within the RKSD buffer (for GP result reads)
 SAVE_LICENSE_OFFSETS = [0x0008, 0x8CC8, 0x11988, 0x1A648]
@@ -77,18 +71,9 @@ GP_CC_OFFSETS: Dict[str, int] = {
     "Mirror": 0x900,
 }
 
-# RaceConfig addresses (for cup locking)
-RACE_CONFIG_PTR     = 0x809BD728
-RACECONFIG_CUP_OFFSET    = 0x177B  # u8: selected cup ID (0-7)
-RACECONFIG_COURSE_OFFSET = 0x175B  # u8: selected track ID
-RACECONFIG_CC_OFFSET     = 0x175F  # u8: 0=50cc, 1=100cc, 2=150cc
-RACECONFIG_MIRROR_OFFSET = 0x1783  # u8: 1=mirror
-
-# RaceConfig menu-scenario addresses (for character/vehicle locking).
+# The menu scenario reads this until a character/vehicle has been picked.
 # See module docstring for the copy-into-race-scenario timing.
-MENU_VEHICLE_OFFSET   = 0xC20  # u32: pending vehicle ID (0-35)
-MENU_CHARACTER_OFFSET = 0xC24  # u32: pending character ID (0-23)
-UNSET_SELECTION       = 0xFFFFFFFF
+UNSET_SELECTION = 0xFFFFFFFF
 
 # Cup ID to name mapping
 CUP_ID_TO_NAME: Dict[int, str] = {
@@ -425,6 +410,7 @@ class DolphinMemoryManager:
         self._suppress_warnings: Dict[str, bool] = {}
         self.mgr: DolphinManager = DolphinManager()
         self.logger = logger if logger is not None else logging.getLogger("MKWii.Memory")
+        self.reporter = ReportHandler(mgr=self.mgr, logger=self.logger)
         self.unlockblock_patch_applied_once = False
 
     @property
@@ -459,24 +445,20 @@ class DolphinMemoryManager:
         Returns True if fully connected with valid save system pointers.
         Silently returns False during normal boot (memory not yet mapped).
         """
-        self.logger.info("Attempting to hook to Dolphin and resolve MKWii pointers...")
-        _report_handler("INFO: Attempting to hook to Dolphin and resolve MKWii pointers...", self.mgr)
+        self.reporter.report(type="INFO", msg="Attempting to hook to Dolphin and resolve MKWii pointers...")
         try:
             # Only hook if not already hooked
             if not dme.is_hooked():
                 dme.hook()
 
             if not dme.is_hooked():
-                self.logger.warning("DME failed to hook!")
-                _report_handler("WARNING: DME failed to hook!", self.mgr)
+                self.reporter.report(type="WARNING", msg="DME failed to hook!")
                 return False
 
-            self.logger.info("DME hooked successfully, resolving pointers...")
-            _report_handler("INFO: DME hooked successfully, resolving pointers...", self.mgr)
+            self.reporter.report(type="INFO", msg="DME hooked successfully, resolving pointers...")
             return await self.async_resolve_pointers()
         except Exception as e:
-            self.logger.error(f"Hook failed unexpectedly: {e}")
-            _report_handler(f"ERROR: Hook failed unexpectedly: {e}", self.mgr)
+            self.reporter.report(type="ERROR", msg=f"Hook failed unexpectedly: {e}")
             try:
                 dme.un_hook()
             except Exception:
@@ -490,46 +472,37 @@ class DolphinMemoryManager:
         try:
             game_id = dme.read_bytes(0x80000000, 6).decode("ascii", errors="replace")
         except Exception as e:
-            self.logger.warning(f"Waiting for Dolphin to load game: {e}")
-            _report_handler(f"WARNING: Waiting for Dolphin to load game: {e}", self.mgr)    
+            self.reporter.report(type="WARNING", msg=f"Waiting for Dolphin to load game: {e}")
             return False
 
         if game_id != "RMCP01":
-            self.logger.warning(f"Wrong game ID: {game_id} (expected RMCP01)")
-            _report_handler(f"WARNING: Wrong game ID: {game_id} (expected RMCP01)", self.mgr)
+            self.reporter.report(type="WARNING", msg=f"Wrong game ID: {game_id} (expected RMCP01)")
             return False
 
         # Resolve system manager pointer
         try:
-            raw = dme.read_bytes(SYSTEM_MANAGER_PTR, 4)
+            mgr_ptr = read_u32(base_address("SYSTEM_MANAGER_PTR"))
         except Exception as e:
-            self.logger.warning(f"Game still initializing: {e}")
-            _report_handler(f"WARNING: Game still initializing: {e}", self.mgr)
+            self.reporter.report(type="WARNING", msg=f"Game still initializing: {e}")
             return False
 
-        mgr_ptr = struct.unpack(">I", raw)[0]
         await asyncio.sleep(0.1)
         if mgr_ptr < 0x80000000:
-            self.logger.warning("Waiting for game to load past title screen...")
-            _report_handler("WARNING: Waiting for game to load past title screen...", self.mgr)
+            self.reporter.report(type="WARNING", msg="Waiting for game to load past title screen...")
             return False
 
         await asyncio.sleep(0.1)
- 
+
         # Resolve save buffer pointer and verify RKSD magic
-        try:
-            save_ptr_raw = dme.read_bytes(mgr_ptr + RAW_SAVE_OFFSET, 4)
-        except Exception as e:
-            self.logger.warning(f"Save system loading: {e}")
-            _report_handler(f"WARNING: Save system loading: {e}", self.mgr)
+        save_ptr = read_named("RAW_SAVE_OFFSET", U32)
+        if save_ptr is None:
+            self.reporter.report(type="WARNING", msg="Save system loading: save pointer not readable yet")
             return False
 
-        save_ptr = struct.unpack(">I", save_ptr_raw)[0]
         await asyncio.sleep(0.1)
-        
+
         if save_ptr < 0x80000000:
-            self.logger.warning(f"Save system loading: {save_ptr}")
-            _report_handler(f"WARNING: Save system loading: {save_ptr}", self.mgr)
+            self.reporter.report(type="WARNING", msg=f"Save system loading: {save_ptr}")
             return False
 
         await asyncio.sleep(0.1)
@@ -537,35 +510,32 @@ class DolphinMemoryManager:
         try:
             magic = dme.read_bytes(save_ptr, 4)
         except Exception as e:
-            self.logger.warning(f"Save buffer not ready: {e}")
-            _report_handler(f"WARNING: Save buffer not ready: {e}", self.mgr)
+            self.reporter.report(type="WARNING", msg=f"Save buffer not ready: {e}")
             return False
-        
+
         await asyncio.sleep(0.1)
 
         if magic != b"RKSD":
-            self.logger.warning(f"Save buffer initializing (magic: {magic.hex()})...")
-            _report_handler(f"WARNING: Save buffer initializing (magic: {magic.hex()})...", self.mgr)
+            self.reporter.report(type="WARNING", msg=f"Save buffer initializing (magic: {magic.hex()})...")
+            return False
+
+        runtime_start = resolve("RUNTIME_UNLOCK_BASE")
+        if runtime_start is None:
+            self.reporter.report(type="WARNING", msg="Runtime unlock block not resolvable yet")
             return False
 
         # All pointers valid
         self._manager_ptr = mgr_ptr
         self._save_buffer_base = save_ptr
-        self._runtime_base = (
-            mgr_ptr + RUNTIME_UNLOCK_OFFSET + self.license_idx * RUNTIME_LICENSE_STRIDE
-        )
+        self._runtime_base = runtime_start + self.license_idx * constant("RUNTIME_LICENSE_STRIDE")
         self._hooked = True
         self._suppress_warnings.clear()
 
-        self.logger.info(
-            f"Hooked: manager=0x{mgr_ptr:08X} "
-            f"runtime=0x{self._runtime_base:08X} "
-            f"rksys=0x{save_ptr:08X}"
-        )
-        _report_handler(
-            f"Hooked: manager=0x{mgr_ptr:08X} "
-            f"runtime=0x{self._runtime_base:08X} "
-            f"rksys=0x{save_ptr:08X}", self.mgr
+        self.reporter.report(
+            type="INFO",
+            msg=f"Hooked: manager=0x{mgr_ptr:08X} "
+                f"runtime=0x{self._runtime_base:08X} "
+                f"rksys=0x{save_ptr:08X}"
         )
         return True
 
@@ -583,17 +553,17 @@ class DolphinMemoryManager:
 
     def _runtime_addr(self, abs_offset: int) -> int:
         """Convert an absolute save offset (0x0038-0x003F) to a runtime address."""
-        return self._runtime_base + (abs_offset - SAVE_UNLOCK_START)
+        return self._runtime_base + (abs_offset - constant("SAVE_UNLOCK_START"))
 
     def _save_addr(self, abs_offset: int) -> int:
         """Convert an absolute save offset to the rksys buffer address."""
-        return self._save_buffer_base + abs_offset + self.license_idx * SAVE_LICENSE_STRIDE
+        return self._save_buffer_base + abs_offset + self.license_idx * constant("SAVE_LICENSE_STRIDE")
 
     def read_unlock_byte(self, abs_offset: int) -> int:
-        return struct.unpack("B", dme.read_bytes(self._runtime_addr(abs_offset), 1))[0]
+        return read_u8(self._runtime_addr(abs_offset))
 
     def read_all_unlock_bytes(self) -> bytes:
-        return dme.read_bytes(self._runtime_base, UNLOCK_BYTE_COUNT)
+        return dme.read_bytes(self._runtime_base, constant("UNLOCK_BYTE_COUNT"))
 
     def is_item_unlocked(self, item_name: str) -> bool:
         lookup = ALL_UNLOCK_IDS.get(item_name)
@@ -608,16 +578,16 @@ class DolphinMemoryManager:
         Returns (old_byte, new_byte) from the runtime write.
         """
         rt_addr = self._runtime_addr(abs_offset)
-        old = struct.unpack("B", dme.read_bytes(rt_addr, 1))[0]
+        old = read_u8(rt_addr)
         new = old | (1 << bit) if value else old & ~(1 << bit)
-        dme.write_bytes(rt_addr, struct.pack("B", new))
+        write_u8(rt_addr, new)
 
         # Mirror to save buffer (non-critical)
         try:
             sv_addr = self._save_addr(abs_offset)
-            sv_old = struct.unpack("B", dme.read_bytes(sv_addr, 1))[0]
+            sv_old = read_u8(sv_addr)
             sv_new = sv_old | (1 << bit) if value else sv_old & ~(1 << bit)
-            dme.write_bytes(sv_addr, struct.pack("B", sv_new))
+            write_u8(sv_addr, sv_new)
         except Exception:
             pass
 
@@ -644,11 +614,11 @@ class DolphinMemoryManager:
 
     def lock_all_unlocks(self) -> None:
         """Zero all unlock bytes (fresh AP state)."""
-        for i in range(UNLOCK_BYTE_COUNT):
-            offset = SAVE_UNLOCK_START + i
-            dme.write_bytes(self._runtime_addr(offset), struct.pack("B", 0))
+        for i in range(constant("UNLOCK_BYTE_COUNT")):
+            offset = constant("SAVE_UNLOCK_START") + i
+            write_u8(self._runtime_addr(offset), 0)
             try:
-                dme.write_bytes(self._save_addr(offset), struct.pack("B", 0))
+                write_u8(self._save_addr(offset), 0)
             except Exception:
                 pass
 
@@ -672,16 +642,16 @@ class DolphinMemoryManager:
             return ("none", "D")
 
         try:
-            completion = struct.unpack("B", dme.read_bytes(addr + 0x52, 1))[0]
+            completion = read_u8(addr + 0x52)
             if not (completion & 0x80):
                 return ("none", "D")
 
-            trophy_byte = struct.unpack("B", dme.read_bytes(addr + 0x4F, 1))[0]
+            trophy_byte = read_u8(addr + 0x4F)
             trophy = {0: "gold", 1: "silver", 2: "bronze", 3: "none"}.get(
                 (trophy_byte >> 6) & 0x03, "none"
             )
 
-            rank_byte = struct.unpack("B", dme.read_bytes(addr + 0x51, 1))[0]
+            rank_byte = read_u8(addr + 0x51)
             rank = {
                 0: "3_star", 1: "2_star", 2: "1_star",
                 3: "A", 4: "B", 5: "C", 6: "D", 7: "E", 8: "F",
@@ -689,42 +659,24 @@ class DolphinMemoryManager:
 
             return (trophy, rank)
         except Exception as e:
-            self.logger.error(f"Error reading GP result for cup {cup_id} {cc}: {e}")
-            _report_handler(f"ERROR: Error reading GP result for cup {cup_id} {cc}: {e}", self.mgr)
+            self.reporter.report(type="ERROR", msg=f"Error reading GP result for cup {cup_id} {cc}: {e}")
             return ("none", "D")
 
     # RaceConfig cup reading/writing (for base cup locking)
 
-    def _read_rc_base(self) -> int:
-        """Read the RaceConfig base pointer. Returns 0 on failure."""
-        try:
-            return struct.unpack(">I", dme.read_bytes(RACE_CONFIG_PTR, 4))[0]
-        except Exception:
-            return 0
-
     def read_selected_cup(self) -> int:
         """Read the currently selected cup ID from RaceConfig. Returns -1 on failure."""
-        try:
-            base = self._read_rc_base()
-            if base == 0:
-                return -1
-            return struct.unpack(">B", dme.read_bytes(base + RACECONFIG_CUP_OFFSET, 1))[0]
-        except Exception:
-            return -1
+        cup = read_named("RACECONFIG_CUP", U8)
+        return -1 if cup is None else cup
 
     def read_selected_cc(self) -> Optional[str]:
         """Read the current CC from RaceConfig."""
-        try:
-            base = self._read_rc_base()
-            if base == 0:
-                return None
-            mirror = struct.unpack(">B", dme.read_bytes(base + RACECONFIG_MIRROR_OFFSET, 1))[0]
-            if mirror == 1:
-                return "Mirror"
-            cc_byte = struct.unpack(">B", dme.read_bytes(base + RACECONFIG_CC_OFFSET, 1))[0]
-            return {0: "50cc", 1: "100cc", 2: "150cc"}.get(cc_byte)
-        except Exception:
+        mirror = read_named("RACECONFIG_MIRROR", U8)
+        if mirror is None:
             return None
+        if mirror == 1:
+            return "Mirror"
+        return {0: "50cc", 1: "100cc", 2: "150cc"}.get(read_named("RACECONFIG_CC", U8))
 
     def redirect_cup(self, target_cup_id: int) -> bool:
         """Overwrite the selected cup and course in RaceConfig to redirect
@@ -732,18 +684,13 @@ class DolphinMemoryManager:
 
         Returns True if the write succeeded.
         """
-        try:
-            base = self._read_rc_base()
-            if base == 0:
-                return False
-            target_track = CUP_FIRST_TRACK.get(target_cup_id)
-            if target_track is None:
-                return False
-            dme.write_bytes(base + RACECONFIG_CUP_OFFSET, struct.pack(">B", target_cup_id))
-            dme.write_bytes(base + RACECONFIG_COURSE_OFFSET, struct.pack(">B", target_track))
-            return True
-        except Exception:
+        target_track = CUP_FIRST_TRACK.get(target_cup_id)
+        if target_track is None:
             return False
+        return (
+            write_named("RACECONFIG_CUP", U8, target_cup_id)
+            and write_named("RACECONFIG_COURSE", U8, target_track)
+        )
 
     # RaceConfig menu-scenario character/vehicle reading/writing
     # (for default character/vehicle locking)
@@ -754,28 +701,16 @@ class DolphinMemoryManager:
         Returns None if nothing has been picked yet (character/vehicle
         select screens aren't active) or on failure.
         """
-        try:
-            base = self._read_rc_base()
-            if base == 0:
-                return None
-            value = struct.unpack(">I", dme.read_bytes(base + MENU_CHARACTER_OFFSET, 4))[0]
-            return None if value == UNSET_SELECTION else value
-        except Exception:
-            return None
+        value = read_named("MENU_CHARACTER", U32)
+        return None if value is None or value == UNSET_SELECTION else value
 
     def read_menu_vehicle(self) -> Optional[int]:
         """Read the pending vehicle ID from RaceConfig's menu scenario.
 
         Returns None if nothing has been picked yet or on failure.
         """
-        try:
-            base = self._read_rc_base()
-            if base == 0:
-                return None
-            value = struct.unpack(">I", dme.read_bytes(base + MENU_VEHICLE_OFFSET, 4))[0]
-            return None if value == UNSET_SELECTION else value
-        except Exception:
-            return None
+        value = read_named("MENU_VEHICLE", U32)
+        return None if value is None or value == UNSET_SELECTION else value
 
     def write_menu_combo(self, character_id: int, vehicle_id: int) -> bool:
         """Overwrite the pending character and vehicle in RaceConfig's menu
@@ -783,30 +718,20 @@ class DolphinMemoryManager:
 
         Returns True if the write succeeded.
         """
-        try:
-            base = self._read_rc_base()
-            if base == 0:
-                return False
-            dme.write_bytes(base + MENU_CHARACTER_OFFSET, struct.pack(">I", character_id))
-            dme.write_bytes(base + MENU_VEHICLE_OFFSET, struct.pack(">I", vehicle_id))
-            return True
-        except Exception:
-            return False
+        return (
+            write_named("MENU_CHARACTER", U32, character_id)
+            and write_named("MENU_VEHICLE", U32, vehicle_id)
+        )
 
     # Race-level detection and lap freeze (fallback for cup locking)
-
-    _RACE_MGR_PTR_ADDR   = 0x809BD730
-    _PLAYER_ARRAY_OFFSET = 0xAC
-    _TRACK_ID_ADDR       = 0x809C26B3
-    _LAP_OFFSET          = 0x25
 
     def is_in_race(self) -> Tuple[bool, int]:
         """Check if we're currently in a race.
         Returns (in_race, race_mgr_ptr).
         """
         try:
-            race_mgr = struct.unpack(">I", dme.read_bytes(self._RACE_MGR_PTR_ADDR, 4))[0]
-            if 0x80000000 <= race_mgr <= 0x817FFFFF:
+            race_mgr = read_u32(base_address("RACE_MGR_PTR_ADDR"))
+            if is_valid_ptr(race_mgr):
                 return True, race_mgr
             return False, 0
         except Exception:
@@ -815,45 +740,22 @@ class DolphinMemoryManager:
     def read_race_track_id(self) -> int:
         """Read the current track ID during a race. Returns -1 on failure."""
         try:
-            return struct.unpack(">B", dme.read_bytes(self._TRACK_ID_ADDR, 1))[0]
+            return read_u8(base_address("TRACK_ID_ADDR"))
         except Exception:
             return -1
 
-    def freeze_p1_lap(self, race_mgr: int) -> bool:
+    def freeze_p1_lap(self, race_mgr: Optional[int] = None) -> bool:
         """Zero P1's lap counter to prevent race completion.
+
+        race_mgr is unused now that the chain is resolved by name, it is only
+        kept so existing callers keep working.
         Returns True if the write succeeded.
         """
-        try:
-            player_array = race_mgr + self._PLAYER_ARRAY_OFFSET
-            player_ptr = struct.unpack(">I", dme.read_bytes(player_array, 4))[0]
-            if 0x80000000 <= player_ptr <= 0x817FFFFF:
-                dme.write_bytes(player_ptr + self._LAP_OFFSET, struct.pack(">B", 0))
-                return True
-            return False
-        except Exception:
-            return False
+        return write_named("P1_LAP", U8, 0)
 
     # DeathLink (player 0 respawn timer and physics position)
 
-    _PLAYER_HOLDER_PTR_ADDR = 0x809C18F8
-    # Pointer walks in the same form as a DME pointer watch: read the pointer at
-    # the current address, add the offset, repeat. The last offset is the field.
-    _PRE_RESPAWN_PATH = (0x20, 0x0, 0x0, 0x30, 0x48)
-    _PLAYER_Y_PATH    = (0x20, 0x0, 0x0, 0x8, 0x90, 0x4, 0x6C)
-    _RACE_STAGE_PATH  = (0x28,)
-    _STAGE_RACING     = 2
-
-    @staticmethod
-    def _walk_pointers(base: int, offsets) -> Optional[int]:
-        """Follow a pointer chain and return the final field address, or None
-        if any pointer along the way is outside MEM1/MEM2."""
-        addr = base
-        for off in offsets:
-            ptr = struct.unpack(">I", dme.read_bytes(addr, 4))[0]
-            if not (0x80000000 <= ptr <= 0x817FFFFF or 0x90000000 <= ptr <= 0x93FFFFFF):
-                return None
-            addr = ptr + off
-        return addr
+    _STAGE_RACING = 2
 
     def read_pre_respawn_timer(self) -> Optional[int]:
         """Read PlayerSub18.preRespawnTimer (s16) of player 0.
@@ -861,68 +763,31 @@ class DolphinMemoryManager:
         0 in normal driving, set to 150 when Lakitu starts a pickup and counts
         down to 0. Returns None when no race is loaded or the walk fails.
         """
-        try:
-            addr = self._walk_pointers(self._PLAYER_HOLDER_PTR_ADDR, self._PRE_RESPAWN_PATH)
-            if addr is None:
-                return None
-            return struct.unpack(">h", dme.read_bytes(addr, 2))[0]
-        except Exception:
-            return None
+        return read_named("PRE_RESPAWN_PATH", S16)
 
     def write_pre_respawn_timer(self, frames: int) -> bool:
         """Overwrite the pickup timer of player 0. Returns True on success."""
-        try:
-            addr = self._walk_pointers(self._PLAYER_HOLDER_PTR_ADDR, self._PRE_RESPAWN_PATH)
-            if addr is None:
-                return False
-            dme.write_bytes(addr, struct.pack(">h", frames))
-            return True
-        except Exception:
-            return False
+        return write_named("PRE_RESPAWN_PATH", S16, frames)
 
     def write_player_y(self, y: float) -> bool:
         """Write the physics Y of player 0 (PlayerPhysics +0x6C). X and Z are
         untouched, so the kart drops straight down from where it is."""
-        try:
-            addr = self._walk_pointers(self._PLAYER_HOLDER_PTR_ADDR, self._PLAYER_Y_PATH)
-            if addr is None:
-                return False
-            dme.write_bytes(addr, struct.pack(">f", y))
-            return True
-        except Exception:
-            return False
+        return write_named("PLAYER_Y_PATH", F32, y)
 
     def read_p1_lap(self) -> int:
         """Read P1's current lap (1-3 in a race, 4 once finished). Returns 0 on failure."""
-        try:
-            in_race, race_mgr = self.is_in_race()
-            if not in_race:
-                return 0
-            player_ptr = struct.unpack(">I", dme.read_bytes(race_mgr + self._PLAYER_ARRAY_OFFSET, 4))[0]
-            if 0x80000000 <= player_ptr <= 0x817FFFFF:
-                return struct.unpack(">B", dme.read_bytes(player_ptr + self._LAP_OFFSET, 1))[0]
-            return 0
-        except Exception:
-            return 0
+        return read_named("P1_LAP", U8) or 0
 
     def race_has_started(self) -> bool:
         """True once Raceinfo.stage is 2 and P1 has not finished (lap 4)."""
-        try:
-            addr = self._walk_pointers(self._RACE_MGR_PTR_ADDR, self._RACE_STAGE_PATH)
-            if addr is None:
-                return False
-            stage = struct.unpack(">I", dme.read_bytes(addr, 4))[0]
-            return stage == self._STAGE_RACING and self.read_p1_lap() < 4
-        except Exception:
-            return False
+        stage = read_named("RACE_STAGE", U32)
+        return stage == self._STAGE_RACING and self.read_p1_lap() < 4
 
     # Vanilla unlock block patch
 
-    # Primary:   write li r3, -1 + blr (0x3860FFFF 4E800020) to 0x80854FA4
-    # Fallback:  write li r3, -1       (0x3860FFFF)           to 0x805EB920
-    _PATCH_PRIMARY_ADDR   = 0x80854FA4
+    # Primary:   write li r3, -1 + blr (0x3860FFFF 4E800020) to UNLOCK_PATCH_PRIMARY_ADDR
+    # Fallback:  write li r3, -1       (0x3860FFFF)           to UNLOCK_PATCH_FALLBACK_ADDR
     _PATCH_PRIMARY_BYTES  = bytes.fromhex("3860FFFF4E800020")
-    _PATCH_FALLBACK_ADDR  = 0x805EB920
     _PATCH_FALLBACK_BYTES = bytes.fromhex("3860FFFF")
 
     async def async_patch_vanilla_unlock_block(self):
@@ -933,54 +798,44 @@ class DolphinMemoryManager:
         successfully, False if both writes fail.
         """
         if not self._hooked:
-            self.logger.warning("patch_vanilla_unlock_block: not hooked, skipping")
-            _report_handler("WARNING: patch_vanilla_unlock_block: not hooked, skipping", self.mgr)
+            self.reporter.report(type="WARNING", msg="patch_vanilla_unlock_block: not hooked, skipping")
             return
+
+        primary_addr = base_address("UNLOCK_PATCH_PRIMARY_ADDR")
+        fallback_addr = base_address("UNLOCK_PATCH_FALLBACK_ADDR")
 
         # Primary patch
         try:
-            dme.write_bytes(self._PATCH_PRIMARY_ADDR, self._PATCH_PRIMARY_BYTES)
-            if(not self.unlockblock_patch_applied_once):
-                self.logger.info(
-                    f"Unlock-block patch applied at 0x{self._PATCH_PRIMARY_ADDR:08X} "
-                    f"({self._PATCH_PRIMARY_BYTES.hex().upper()})"
-                )
-                _report_handler(
-                    f"INFO: Unlock-block patch applied at 0x{self._PATCH_PRIMARY_ADDR:08X} "
-                    f"({self._PATCH_PRIMARY_BYTES.hex().upper()})", self.mgr
+            dme.write_bytes(primary_addr, self._PATCH_PRIMARY_BYTES)
+            if not self.unlockblock_patch_applied_once:
+                self.reporter.report(
+                    type="INFO",
+                    msg=f"Unlock-block patch applied at 0x{primary_addr:08X} "
+                        f"({self._PATCH_PRIMARY_BYTES.hex().upper()})"
                 )
                 self.unlockblock_patch_applied_once = True
             return
         except Exception as e:
-            self.logger.warning(
-                f"Primary patch failed at 0x{self._PATCH_PRIMARY_ADDR:08X}: {e} "
-                f", trying fallback..."
-            )
-            _report_handler(
-                f"WARNING: Primary patch failed at 0x{self._PATCH_PRIMARY_ADDR:08X}: {e} "
-                f", trying fallback...", self.mgr
+            self.reporter.report(
+                type="WARNING",
+                msg=f"Primary patch failed at 0x{primary_addr:08X}: {e}, trying fallback..."
             )
 
         # Fallback patch
         try:
-            dme.write_bytes(self._PATCH_FALLBACK_ADDR, self._PATCH_FALLBACK_BYTES)
-            if(not self.unlockblock_patch_applied_once):
-                self.logger.info(
-                    f"Unlock-block fallback patch applied at 0x{self._PATCH_FALLBACK_ADDR:08X} "
-                    f"({self._PATCH_FALLBACK_BYTES.hex().upper()})"
-                )
-                _report_handler(
-                    f"INFO:Unlock-block fallback patch applied at 0x{self._PATCH_FALLBACK_ADDR:08X} "
-                    f"({self._PATCH_FALLBACK_BYTES.hex().upper()})", self.mgr
+            dme.write_bytes(fallback_addr, self._PATCH_FALLBACK_BYTES)
+            if not self.unlockblock_patch_applied_once:
+                self.reporter.report(
+                    type="INFO",
+                    msg=f"Unlock-block fallback patch applied at 0x{fallback_addr:08X} "
+                        f"({self._PATCH_FALLBACK_BYTES.hex().upper()})"
                 )
                 self.unlockblock_patch_applied_once = True
             return
         except Exception as e:
-            self.logger.error(
-                f"Fallback patch also failed at 0x{self._PATCH_FALLBACK_ADDR:08X}: {e}"
-            )
-            _report_handler(
-                f"ERROR: Fallback patch also failed at 0x{self._PATCH_FALLBACK_ADDR:08X}: {e}", self.mgr
+            self.reporter.report(
+                type="ERROR",
+                msg=f"Fallback patch also failed at 0x{fallback_addr:08X}: {e}"
             )
             return
 
@@ -988,5 +843,5 @@ class DolphinMemoryManager:
 
     def _warn_once(self, key: str, msg: str) -> None:
         if not self._suppress_warnings.get(key):
-            self.logger.warning(msg)
+            self.reporter.report(type="WARNING", msg=msg)
             self._suppress_warnings[key] = True
