@@ -319,6 +319,7 @@ class MKWiiWorld(World):
             "starting_bike": self.starting_bike,
             "death_link": bool(self.options.death_link.value),
             "death_link_respawn_time": self.options.death_link_respawn_time.value,
+            "death_link_amnesty": self.options.death_link_amnesty.value,
         }
 
     def _get_trap_weights(self) -> typing.Dict[str, int]:
