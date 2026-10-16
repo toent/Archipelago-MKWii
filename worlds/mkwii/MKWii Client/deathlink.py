@@ -22,14 +22,17 @@ DEATH_COOLDOWN = 5.0
 
 
 class DeathLinkBridge:
-    def __init__(self, send_death, get_mem, respawn_tenths=25):
+    def __init__(self, send_death, get_mem, respawn_tenths=25, amnesty=1, notify=None):
         # send_death is an async callable taking no arguments.
         # get_mem returns the DolphinMemoryManager while it is hooked and no
         # savestate is loading, otherwise None.
+        self.notify = notify or (lambda msg: None)
         self.send_death = send_death
         self.get_mem = get_mem
         self.respawn_frames = VANILLA_RESPAWN_FRAMES
         self.set_respawn_time(respawn_tenths)
+        self.amnesty = amnesty
+        self.currentAmnesty = 0
         self.pending_until = 0.0
         self.suppress_until = 0.0
         self.last_death = 0.0
@@ -79,7 +82,11 @@ class DeathLinkBridge:
         self.active = t > 0
         self.last_t = t
         if send:
-            await self.send_death()
+            self.currentAmnesty += 1
+            self.notify(f"Died! (Amnesty {self.currentAmnesty}/{self.amnesty})")
+            if self.currentAmnesty >= self.amnesty:
+                self.currentAmnesty = 0
+                await self.send_death()
 
         if self.pending_until > now:
             if self.active:
