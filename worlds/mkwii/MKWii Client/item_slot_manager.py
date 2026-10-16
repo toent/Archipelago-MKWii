@@ -10,7 +10,7 @@ Handles real-time item injection into P1's item slot during races:
   - Filler/targeted queues persist across sessions via /itemqueues/<room_id>.itemqueue
   - Sends individual race location checks (track + CC + 1st Place) when lap=4, place=1
 
-Memory addresses are PAL (RMCP01) verified against testge.py.
+Memory addresses and pointer chains live in dme_addresses.py, access goes through dme_helpers.py.
 
 Priority order each poll tick:
   1. Pending immediate trap  -> overwrite, no remorse, regardless of slot state
@@ -24,41 +24,14 @@ import typing
 
 import json
 import logging
-import struct
 from collections import deque
 from pathlib import Path
 from random import choices, choice
 from typing import Callable, Deque, Dict, List, Optional, Set, Tuple
 
-import dolphin_memory_engine as dme
+from dme_helpers import U8, U32, base_address, is_valid_ptr, read_named, read_u8, write_named
 
 logger = logging.getLogger("MKWii.ItemSlot")
-
-# Pointer to the race manager base; player array is at base + 0xAC
-_RACE_MGR_PTR_ADDR  = 0x809BD730
-_PLAYER_ARRAY_OFFSET = 0xAC
-
-# Static pointer chain for item holders
-_ITEM_HOLDER_STATIC     = 0x809C3618
-_ITEM_HOLDER_PTR_OFFSET = 0x14
-
-# Current track ID (1 byte, direct address)
-_TRACK_ID_ADDR = 0x809C26B3
-
-# CC/mirror bytes sit behind a pointer
-_CC_PTR_BASE    = 0x809BD728
-_CC_OFFSET      = 0x175F
-_MIRROR_OFFSET  = 0x1783
-
-# Per-player offsets (relative to player pointer)
-_PLACEMENT_OFFSET = 0x20
-_LAP_OFFSET       = 0x25
-
-# Item holder offsets (relative to item-holder pointer for a player)
-_ITEM_ID_OFFSET    = 0x8C
-_ITEM_COUNT_OFFSET = 0x90
-_GM_ACTIVATION_FLAG_OFFSET = 0xA4
-_ROULETTE_DISPLAY_OFFSET = 0x6C
 
 # In game item IDs
 ITEM_ID: Dict[str, int] = {
@@ -208,83 +181,40 @@ FUTURE_EFFECT_TRAPS: Set[str] = {"Brake Trap", "Gas Trap", "Boost Trap","POW Tra
 _RANDOM_TOKEN = "__random__"
 
 
-# Helper methods
-
-def _read_u8(addr: int) -> int:
-    return struct.unpack(">B", dme.read_bytes(addr, 1))[0]
-
-def _read_u32(addr: int) -> int:
-    return struct.unpack(">I", dme.read_bytes(addr, 4))[0]
-
-def _write_u32(addr: int, value: int) -> None:
-    dme.write_bytes(addr, struct.pack(">I", value))
-
-def _is_valid_mem1(addr: int) -> bool:
-    return 0x80000000 <= addr <= 0x817FFFFF
-
-
 # Race state reader
 
 class RaceStateReader:
-    def read_player_ptr(self, player_idx: int = 0) -> int:
-        try:
-            race_mgr   = _read_u32(_RACE_MGR_PTR_ADDR)
-            array_base = race_mgr + _PLAYER_ARRAY_OFFSET
-            ptr        = _read_u32(array_base + player_idx * 4)
-            return ptr if _is_valid_mem1(ptr) else 0
-        except Exception:
-            return 0
-
     def read_p1_lap(self) -> int:
-        ptr = self.read_player_ptr(0)
-        if not ptr:
-            return 0
-        try:
-            return _read_u8(ptr + _LAP_OFFSET)
-        except Exception:
-            return 0
+        return read_named("P1_LAP", U8) or 0
 
     def read_p1_placement(self) -> int:
-        ptr = self.read_player_ptr(0)
-        if not ptr:
-            return 0
-        try:
-            return _read_u8(ptr + _PLACEMENT_OFFSET)
-        except Exception:
-            return 0
+        return read_named("P1_PLACEMENT", U8) or 0
 
-    def read_p1_item_holder_ptr(self) -> int:
-        try:
-            item_holder = _read_u32(_ITEM_HOLDER_STATIC)
-            ptr = _read_u32(item_holder + _ITEM_HOLDER_PTR_OFFSET)
-            return ptr if _is_valid_mem1(ptr) else 0
-        except Exception:
-            return 0
+    def item_holder_ready(self) -> bool:
+        # True once P1's item holder pointer points at valid memory
+        ptr = read_named("ITEM_HOLDER_PTR", U32)
+        return ptr is not None and is_valid_ptr(ptr)
 
     def read_track_id(self) -> int:
         try:
-            return _read_u8(_TRACK_ID_ADDR)
+            return read_u8(base_address("TRACK_ID_ADDR"))
         except Exception:
             return 0xFF
         
-    def read_p1_roulette_active(self, ih_ptr: int) -> bool:
-        try:
-            roulette_display = _read_u32(ih_ptr + _ROULETTE_DISPLAY_OFFSET)
-            actual_item      = _read_u32(ih_ptr + _ITEM_ID_OFFSET)
-            return roulette_display != EMPTY_ID and actual_item == EMPTY_ID
-        except Exception:
+    def read_p1_roulette_active(self) -> bool:
+        roulette_display = read_named("ITEM_ROULETTE_DISPLAY", U32)
+        actual_item      = read_named("ITEM_ID", U32)
+        if roulette_display is None or actual_item is None:
             return False
+        return roulette_display != EMPTY_ID and actual_item == EMPTY_ID
 
     def read_cc_name(self) -> Optional[str]:
-        try:
-            base   = _read_u32(_CC_PTR_BASE)
-            mirror = _read_u8(base + _MIRROR_OFFSET)
-            if mirror == 1:
-                return "Mirror"
-            cc_byte = _read_u8(base + _CC_OFFSET)
-            return CC_BYTE_TO_NAME.get(cc_byte)
-        except Exception:
+        mirror = read_named("RACECONFIG_MIRROR", U8)
+        if mirror is None:
             return None
+        if mirror == 1:
+            return "Mirror"
+        return CC_BYTE_TO_NAME.get(read_named("RACECONFIG_CC", U8))
 
 
 # Item Slot Manager
@@ -321,7 +251,7 @@ class ItemSlotManager:
         
         self._pending_trap: Optional[str] = None
         # Active race inject state, updated by poll(), consumed by run_inject_loop()
-        self._inject_ih_ptr:    int = 0
+        self._inject_active:    bool = False
         self._inject_placement: int = 0
         # Set of (sender_player, location_id) tuples already queued.
         # Persisted so reconnects don't re-queue items from previous sessions.
@@ -470,23 +400,31 @@ class ItemSlotManager:
 
     # Memory read/write
 
-    def _read_slot(self, ih_ptr: int) -> Tuple[int, int]:
-        item_id = _read_u32(ih_ptr + _ITEM_ID_OFFSET)
-        count   = _read_u32(ih_ptr + _ITEM_COUNT_OFFSET)
+    def _read_slot(self) -> Optional[Tuple[int, int]]:
+        # None if P1's item holder cannot be resolved right now
+        item_id = read_named("ITEM_ID", U32)
+        count   = read_named("ITEM_COUNT", U32)
+        if item_id is None or count is None:
+            return None
         return item_id, count
 
-    def _write_slot(self, ih_ptr: int, game_item_name: str) -> bool:
+    def _write_slot(self, game_item_name: str) -> bool:
         item_id = ITEM_ID.get(game_item_name)
         if item_id is None:
             self.logger.warning(f"[ItemSlot] Unknown item for write: {game_item_name}")
             return False
         count = _ITEM_COUNT_MAP.get(item_id, 1)
-        _write_u32(ih_ptr + _ITEM_ID_OFFSET,    item_id)
-        _write_u32(ih_ptr + _ITEM_COUNT_OFFSET, count)
+        if not (write_named("ITEM_ID", U32, item_id) and write_named("ITEM_COUNT", U32, count)):
+            self.logger.warning(f"[ItemSlot] Could not write slot: {game_item_name}")
+            return False
         if item_id == ITEM_ID["Golden Mushroom"]:
-            _write_u32(ih_ptr + _GM_ACTIVATION_FLAG_OFFSET, 0x01000000)
+            write_named("ITEM_GM_ACTIVATION_FLAG", U32, 0x01000000)
         self.logger.info(f"[ItemSlot] Wrote: {game_item_name} (id=0x{item_id:02X} count={count})")
         return True
+
+    def _clear_slot(self) -> None:
+        write_named("ITEM_ID", U32, EMPTY_ID)
+        write_named("ITEM_COUNT", U32, 0)
     
     # Race lifecycle
 
@@ -507,7 +445,7 @@ class ItemSlotManager:
     ) -> None:
         lap       = self._race_reader.read_p1_lap()
         placement = self._race_reader.read_p1_placement()
-        ih_ptr    = self._race_reader.read_p1_item_holder_ptr()
+        holder_ok = self._race_reader.item_holder_ready()
 
         if self._prev_lap == 0 and lap >= 1:
             self._on_new_race()
@@ -527,11 +465,11 @@ class ItemSlotManager:
             self._check_sent_this_race = True
 
         # Store active state for the fast inject loop
-        if lap < 1 or lap >= 4 or ih_ptr == 0 or not self.enable_item_randomization:
-            self._inject_ih_ptr    = 0
+        if lap < 1 or lap >= 4 or not holder_ok or not self.enable_item_randomization:
+            self._inject_active    = False
             self._inject_placement = 0
         else:
-            self._inject_ih_ptr    = ih_ptr
+            self._inject_active    = True
             self._inject_placement = placement
 
     async def run_inject_loop(self) -> None:
@@ -543,20 +481,19 @@ class ItemSlotManager:
         import asyncio
         while True:
             try:
-                if self._inject_ih_ptr != 0:
-                    self._inject(self._inject_ih_ptr, self._inject_placement)
+                if self._inject_active:
+                    self._inject(self._inject_placement)
             except Exception as e:
                 self.logger.warning(f"[ItemSlot] Inject loop error: {e}")
             await asyncio.sleep(0.016)
 
-    def _inject(self, ih_ptr: int, placement: int) -> None:
-        try:
-            item_id, count = self._read_slot(ih_ptr)
-        except Exception as e:
-            self.logger.warning(f"[ItemSlot] Slot read error: {e}")
+    def _inject(self, placement: int) -> None:
+        slot = self._read_slot()
+        if slot is None:
             return
-        
-        roulette_active = self._race_reader.read_p1_roulette_active(ih_ptr)
+        item_id, count = slot
+
+        roulette_active = self._race_reader.read_p1_roulette_active()
         if roulette_active:
             if not self._prev_roulette_active:
                 self._roulette_start_placement = placement
@@ -573,7 +510,7 @@ class ItemSlotManager:
         if self._pending_trap is not None:
             trap_item = self._pending_trap
             self._pending_trap = None
-            if self._write_slot(ih_ptr, trap_item):
+            if self._write_slot(trap_item):
                 self.was_filler_trap_given = True
                 self.item_slot_was_empty   = False
             return
@@ -581,7 +518,7 @@ class ItemSlotManager:
         if is_empty and self._targeted_queue:
             game_item = self._targeted_queue.popleft()
             self._save_queue()
-            if self._write_slot(ih_ptr, game_item):
+            if self._write_slot(game_item):
                 self.item_slot_was_empty = False
             return
 
@@ -590,10 +527,9 @@ class ItemSlotManager:
             self._save_queue()
             game_item = self._resolve_filler_token(token, placement)
             if game_item is None:
-                _write_u32(ih_ptr + _ITEM_ID_OFFSET,    EMPTY_ID)
-                _write_u32(ih_ptr + _ITEM_COUNT_OFFSET, 0)
+                self._clear_slot()
                 self.logger.info("[ItemSlot] No unlocked items - cleared slot")
-            elif self._write_slot(ih_ptr, game_item):
+            elif self._write_slot(game_item):
                 self.was_filler_trap_given = True
                 self.item_slot_was_empty   = False
             return
@@ -603,8 +539,7 @@ class ItemSlotManager:
         if prev_was_empty and not is_empty and not self.was_filler_trap_given:
             game_item = self._pick_pool_item(self._roulette_start_placement)
             if game_item is None:
-                _write_u32(ih_ptr + _ITEM_ID_OFFSET,    EMPTY_ID)
-                _write_u32(ih_ptr + _ITEM_COUNT_OFFSET, 0)
+                self._clear_slot()
                 self.logger.info("[ItemSlot] No unlocked items — cleared slot")
             else:
-                self._write_slot(ih_ptr, game_item)
+                self._write_slot(game_item)
