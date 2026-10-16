@@ -52,6 +52,8 @@ from __future__ import annotations
 import sys
 from time import time
 import traceback
+
+from random import Random
 from dolphin_manager import DolphinManager
 
 def _crash_handler(exc_type, exc_value, exc_tb):
@@ -270,7 +272,19 @@ class MKWiiContext(CommonContext):
         return None
 
     async def _send_natural_death(self) -> None:
-        await self.send_death(f"{self.player_names[self.slot]} fell off the track")
+        deathlink_messages = [
+            "fell off the track...",
+            "couldn't handle the turns...",
+            "couldn't stay on track...",
+            "got bonked off...",
+            "discovered cars aren't airplanes...",
+            "wasn't fast enough...",
+            "had one too many drinks...",
+            "wasn't ready for the next turn...",
+            "spent too long living on the edge...",
+            "mama'd their last mia..."
+        ]
+        await self.send_death(f"{self.player_names[self.slot]} {deathlink_messages[Random().randint(0, len(deathlink_messages) - 1)]}")
 
     def on_deathlink(self, data: dict) -> None:
         super().on_deathlink(data)
@@ -405,14 +419,17 @@ class MKWiiContext(CommonContext):
                 self._memory_poll_task = asyncio.create_task(self._poll_dolphin())
 
             if self.slot_data.get("death_link"):
+                amnesty = self.slot_data.get("death_link_amnesty", 1)
                 if self.deathlink is None:
-                    self.deathlink = DeathLinkBridge(self._send_natural_death, self._deathlink_mem)
+                    self.deathlink = DeathLinkBridge(self._send_natural_death, self._deathlink_mem, amnesty=amnesty, notify=logger.info)
+                self.deathlink.amnesty = amnesty
+                self.deathlink.currentAmnesty = 0
                 self.deathlink.set_respawn_time(self.slot_data.get("death_link_respawn_time", 25))
                 asyncio.create_task(self.update_death_link(True))
                 if not self._deathlink_task:
                     self._deathlink_task = asyncio.create_task(self.deathlink.run())
-                console_logger.info("DeathLink enabled")
-                _report_handler("INFO: DeathLink enabled", self.dolphin_mgr)
+                console_logger.info(f"DeathLink enabled, amnesty: {amnesty}")
+                _report_handler(f"INFO: DeathLink enabled, amnesty: {amnesty}", self.dolphin_mgr)
 
         elif cmd == "ReceivedItems":
             self._handle_received_items(args)

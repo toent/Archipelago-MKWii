@@ -4,6 +4,12 @@ Options for Mario Kart Wii Archipelago World
 from dataclasses import dataclass
 from Options import Choice, DeathLink, Range, OptionSet, PerGameCommonOptions, Toggle
 
+class DeathLinkAmnesty(Range):
+    """How many times you need to fall of the track to trigger a DeathLink death. (1 = every fall, 2 = every other fall, etc. Only applies when DeathLink is on.)"""
+    range_start = 1
+    range_end = 10
+    default = 1
+
 class DeathLinkRespawnTime(Range):
     """How long Lakitu takes to pick you up after a received DeathLink, in tenths
     of a second. 25 is the vanilla 2.5 seconds. Only applies when DeathLink is on.
@@ -304,6 +310,7 @@ class FillerWeightPOWBlock(Range):
 @dataclass
 class MKWiiOptions(PerGameCommonOptions):
     death_link: DeathLink
+    death_link_amnesty: DeathLinkAmnesty
     death_link_respawn_time: DeathLinkRespawnTime
     enabled_ccs: EnabledCCs
     enabled_cup_check_tiers: EnabledCupCheckTiers
