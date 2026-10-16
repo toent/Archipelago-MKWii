@@ -59,12 +59,12 @@ def _crash_handler(exc_type, exc_value, exc_tb):
         traceback.print_exception(exc_type, exc_value, exc_tb, file=f)
     traceback.print_exception(exc_type, exc_value, exc_tb)
 
-from reporting import report_handler as _report_handler
+from reporting import ReportHandler
 
 sys.excepthook = _crash_handler
 
 import asyncio
-import logging
+import logging  
 import os
 from pathlib import Path
 from typing import Dict, Optional, Set, Tuple
@@ -80,7 +80,7 @@ from NetUtils import ClientStatus
 from dolphin_memory import (
     CHARACTER_IDS, VEHICLE_IDS, CUP_UNLOCK_IDS, MODE_IDS, ALL_UNLOCK_IDS,
     CUP_TROPHY_IDS, DolphinMemoryManager, get_vehicle_alternates,
-    CUP_NAME_TO_ID, CUP_ID_TO_NAME, BASE_CUP_NAMES, TRACK_TO_CUP,
+    CUP_NAME_TO_ID, CUP_ID_TO_NAME, TRACK_TO_CUP,
     CHARACTER_ID_TO_NAME, CHARACTER_NAME_TO_ID,
     VEHICLE_ID_TO_NAME, VEHICLE_NAME_TO_ID, resolve_combo,
 )
@@ -214,6 +214,8 @@ class MKWiiContext(CommonContext):
         self.deathlink: Optional[DeathLinkBridge] = None
         self._deathlink_task: Optional[asyncio.Task] = None
 
+        self.reporter = ReportHandler(mgr=self.dolphin_mgr, logger=console_logger)
+
     def _is_cup_unlocked_for_cc(self, cup_name: str, cc: str) -> bool:
         """Check if a specific cup is unlocked for a specific CC."""
         return f"{cup_name} {cc}" in self.unlocked_cups
@@ -304,13 +306,10 @@ class MKWiiContext(CommonContext):
                     else (entry, "50cc")
                     for entry in starting_cups_raw
                 )
-                console_logger.warning(
-                    "[SlotData] starting_cups arrived as a list (old seed format), "
-                    "parsed as cup/cc pairs. Regenerate the seed to avoid this warning."
-                )
-                _report_handler(
-                    "WARNING: [SlotData] starting_cups arrived as a list (old seed format). "
-                    "Regenerate the seed to avoid this warning.", self.dolphin_mgr
+                self.reporter.report(
+                    type="WARNING",
+                    msg=f"[SlotData] starting_cups arrived as a list (old seed format). "
+                         f"Regenerate the seed to avoid this warning."
                 )
             else:
                 console_logger.warning(
@@ -321,8 +320,7 @@ class MKWiiContext(CommonContext):
             for cup_name, cc in starting_cups_iter:
                 item_name = f"{cup_name} {cc}"
                 self.unlocked_cups.add(item_name)
-                console_logger.info(f"Starting cup: {item_name}")
-                _report_handler(f"INFO: Starting cup: {item_name}", self.dolphin_mgr)
+                self.reporter.report(type="INFO", msg=f"Starting cup: {item_name}")
 
             # Load default character/vehicle locking state and seed the
             # unlocked sets. Default characters/vehicles never arrive as
@@ -336,16 +334,14 @@ class MKWiiContext(CommonContext):
             if lock_chars:
                 for char in self.slot_data.get("starting_characters", []):
                     self.unlocked_characters.add(char)
-                    console_logger.info(f"Starting character: {char}")
-                    _report_handler(f"INFO: Starting character: {char}", self.dolphin_mgr)
+                    self.reporter.report(type="INFO", msg=f"Starting character: {char}")
             else:
                 from worlds.mkwii.items import DEFAULT_CHARACTER_ITEMS
                 for name in DEFAULT_CHARACTER_ITEMS:
                     self.unlocked_characters.add(name.replace("Character: ", "", 1))
-                console_logger.info("Default character locking off: all default characters unlocked")
-                _report_handler(
-                    "INFO: Default character locking off: all default characters unlocked",
-                    self.dolphin_mgr
+                self.reporter.report(
+                    type="INFO",
+                    msg="Default character locking off: all default characters unlocked"
                 )
 
             if lock_vehicles:
@@ -353,22 +349,19 @@ class MKWiiContext(CommonContext):
                 starting_bike = self.slot_data.get("starting_bike")
                 if starting_kart:
                     self.unlocked_karts.update(get_vehicle_alternates(starting_kart))
-                    console_logger.info(f"Starting kart: {starting_kart}")
-                    _report_handler(f"INFO: Starting kart: {starting_kart}", self.dolphin_mgr)
+                    self.reporter.report(type="INFO", msg=f"Starting kart: {starting_kart}")
                 if starting_bike:
                     self.unlocked_bikes.update(get_vehicle_alternates(starting_bike))
-                    console_logger.info(f"Starting bike: {starting_bike}")
-                    _report_handler(f"INFO: Starting bike: {starting_bike}", self.dolphin_mgr)
+                    self.reporter.report(type="INFO", msg=f"Starting bike: {starting_bike}")
             else:
                 from worlds.mkwii.items import DEFAULT_KART_ITEMS, DEFAULT_BIKE_ITEMS
                 for name in DEFAULT_KART_ITEMS:
                     self.unlocked_karts.update(get_vehicle_alternates(name.replace("Kart: ", "", 1)))
                 for name in DEFAULT_BIKE_ITEMS:
                     self.unlocked_bikes.update(get_vehicle_alternates(name.replace("Bike: ", "", 1)))
-                console_logger.info("Default vehicle locking off: all default vehicles unlocked")
-                _report_handler(
-                    "INFO: Default vehicle locking off: all default vehicles unlocked",
-                    self.dolphin_mgr
+                self.reporter.report(
+                    type="INFO",
+                    msg="Default vehicle locking off: all default vehicles unlocked"
                 )
 
             self._build_location_lookup()
@@ -392,13 +385,10 @@ class MKWiiContext(CommonContext):
             # Re-sync unlocked powerup pool from already-received items
             self._resync_item_slot_pool()
             asyncio.create_task(self._item_slot_mgr.run_inject_loop())
-            console_logger.info(
-                f"[ItemSlot] Manager ready, pool: {len(self._item_slot_mgr.unlocked_items)} items, "
-                f"mode: {random_mode}"
-            )
-            _report_handler(
-                f"INFO: [ItemSlot] Manager ready, pool: {len(self._item_slot_mgr.unlocked_items)} items, "
-                f"mode: {random_mode}", self.dolphin_mgr
+            self.reporter.report(
+                type="INFO",
+                msg=f"[ItemSlot] Manager ready, pool: {len(self._item_slot_mgr.unlocked_items)} items, "
+                     f"mode: {random_mode}"
             )
 
             if not self._memory_poll_task:
@@ -411,8 +401,7 @@ class MKWiiContext(CommonContext):
                 asyncio.create_task(self.update_death_link(True))
                 if not self._deathlink_task:
                     self._deathlink_task = asyncio.create_task(self.deathlink.run())
-                console_logger.info("DeathLink enabled")
-                _report_handler("INFO: DeathLink enabled", self.dolphin_mgr)
+                self.reporter.report(type="INFO", msg="DeathLink enabled")
 
         elif cmd == "ReceivedItems":
             self._handle_received_items(args)
@@ -445,8 +434,7 @@ class MKWiiContext(CommonContext):
 
         if count != self.victory_trophies:
             self.victory_trophies = count
-            console_logger.info(f"Victory Trophies: {count}/{required}")
-            _report_handler(f"INFO: Victory Trophies: {count}/{required}", self.dolphin_mgr)
+            self.reporter.report(type="INFO", msg=f"Victory Trophies: {count}/{required}")
 
         if self.goal_reached or count < required:
             return
@@ -511,10 +499,9 @@ class MKWiiContext(CommonContext):
                 game_name = AP_TO_GAME.get(item_name)
                 if game_name:
                     self._item_slot_mgr.unlock_item_in_pool(game_name)
-                    console_logger.info(f"[ItemSlot] Pool unlock: {item_name} -> {game_name}")
-                    _report_handler(
-                        f"INFO: [ItemSlot] Pool unlock: {item_name} -> {game_name}",
-                        self.dolphin_mgr
+                    self.reporter.report(
+                        type="INFO",
+                        msg=f"[ItemSlot] Pool unlock: {item_name} -> {game_name}"
                     )
 
             if self._item_slot_mgr:
@@ -584,10 +571,9 @@ class MKWiiContext(CommonContext):
                         self._item_slot_mgr.unlock_item_in_pool(game_name)
                         count += 1
             if count:
-                console_logger.info(f"[ItemSlot] Re-synced {count} powerups into pool")
-                _report_handler(
-                    f"INFO: [ItemSlot] Re-synced {count} powerups into pool",
-                    self.dolphin_mgr
+                self.reporter.report(
+                    type="INFO",
+                    msg=f"[ItemSlot] Re-synced {count} powerups into pool"
                 )
         except Exception as e:
             console_logger.warning(f"[ItemSlot] Pool re-sync error: {e}")
@@ -595,24 +581,20 @@ class MKWiiContext(CommonContext):
     # Dolphin connection
 
     async def _try_hook_dolphin(self) -> bool:
-        logger.warning("Starting Dolphin hook process...")
-        _report_handler("WARNING: Starting Dolphin hook process...", self.dolphin_mgr)
+        self.reporter.report(type="WARNING", msg="Starting Dolphin hook process...")
 
         if self.dolphin is None:
             self.dolphin = DolphinMemoryManager(license_num=1, logger=console_logger)
 
-        logger.info("Attempting to hook to Dolphin...")
-        _report_handler("INFO: Attempting to hook to Dolphin...", self.dolphin_mgr)
+        self.reporter.report(type="INFO", msg="Attempting to hook to Dolphin...")
         if not await self.dolphin.async_hook():
             logger.debug("Not hooked to Dolphin yet")
-            _report_handler("DEBUG: Not hooked to Dolphin yet", self.dolphin_mgr)
+            self.reporter.report(type="DEBUG", msg="Not hooked to Dolphin yet")
             return False
 
-        logger.info("Connected to Dolphin")
-        _report_handler("INFO: Connected to Dolphin", self.dolphin_mgr)
+        self.reporter.report(type="INFO", msg="Connected to Dolphin")
 
-        logger.info("Applying AP unlocks to current Dolphin session...")
-        _report_handler("INFO: Applying AP unlocks to current Dolphin session...", self.dolphin_mgr)
+        self.reporter.report(type="INFO", msg="Applying AP unlocks to current Dolphin session...")
         self._apply_all_received_items()
         return True
 
@@ -623,24 +605,21 @@ class MKWiiContext(CommonContext):
 
         self._loading_state = True
         if not self.dolphin._hooked:
-            asyncio.sleep(1)
+            await asyncio.sleep(1)
             self.dolphin_mgr.focus_game_window()
         try:
             for attempt in range(30):
                 if self._try_hook_dolphin():
-                    logger.info("Hooked to Dolphin via /hook")
-                    _report_handler("INFO: Hooked to Dolphin via /hook", self.dolphin_mgr)
+                    self.reporter.report(type="INFO", msg="Hooked to Dolphin via /hook")
                     self._apply_all_received_items()
                     return
 
                 if attempt in (5, 15, 25):
-                    console_logger.info(f"Waiting for Dolphin... (attempt {attempt + 1}/30)")
-                    _report_handler(f"INFO: Waiting for Dolphin... (attempt {attempt + 1}/30)", self.dolphin_mgr)
+                    self.reporter.report(type="INFO", msg=f"Waiting for Dolphin... (attempt {attempt + 1}/30)")
 
                 await asyncio.sleep(1.0)
 
-            logger.warning("/hook failed after 30 attempts - poll loop will retry")
-            _report_handler("WARNING: /hook failed after 30 attempts - poll loop will retry", self.dolphin_mgr)
+            self.reporter.report(type="WARNING", msg="/hook failed after 30 attempts - poll loop will retry")
 
         finally:
             self._loading_state = False
@@ -649,19 +628,16 @@ class MKWiiContext(CommonContext):
 
     async def _poll_dolphin(self) -> None:
         """Main loop: connect to Dolphin, check locations, enforce AP state, inject items."""
-        console_logger.info("Starting Dolphin memory poll...")
-        _report_handler("INFO: Starting Dolphin memory poll...", self.dolphin_mgr)
+        self.reporter.report(type="INFO", msg="Starting Dolphin memory poll...")
         if self.dolphin is None:
             self.dolphin = DolphinMemoryManager(license_num=1, logger=console_logger)
 
-        console_logger.info("Starting Dolphin memory polling loop...")
-        _report_handler("INFO: Starting Dolphin memory polling loop...", self.dolphin_mgr)
+        self.reporter.report(type="INFO", msg="Starting Dolphin memory polling loop...")
         while True:
             try:
                 if not self.dolphin._hooked:
-                    asyncio.sleep(1)
-                    console_logger.info("Focusing Dolphin window for hook...")
-                    _report_handler("INFO: Focusing Dolphin window for hook...", self.dolphin_mgr)
+                    await asyncio.sleep(1)
+                    self.reporter.report(type="INFO", msg="Focusing Dolphin window for hook...")
                     self.dolphin_mgr.focus_game_window()
                 await asyncio.sleep(0.5)
 
@@ -669,8 +645,7 @@ class MKWiiContext(CommonContext):
                     continue
 
                 if not self.dolphin or not self.dolphin.is_connected:
-                    console_logger.info("Trying to hook Dolphin...")
-                    _report_handler("INFO: Trying to hook Dolphin...", self.dolphin_mgr)
+                    self.reporter.report(type="INFO", msg="Trying to hook Dolphin...")
                     if not await self._try_hook_dolphin():
                         await asyncio.sleep(2)
                         continue
@@ -679,8 +654,7 @@ class MKWiiContext(CommonContext):
                 try:
                     self.dolphin.read_all_unlock_bytes()
                 except Exception:
-                    console_logger.warning("Lost Dolphin connection, retrying...")
-                    _report_handler("WARNING: Lost Dolphin connection, retrying...", self.dolphin_mgr)
+                    self.reporter.report(type="WARNING", msg="Lost Dolphin connection, retrying...")
                     self.dolphin.unhook()
                     continue
 
@@ -703,8 +677,7 @@ class MKWiiContext(CommonContext):
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                console_logger.error(f"Poll error: {e}")
-                _report_handler(f"ERROR: Poll error: {e}", self.dolphin_mgr)
+                self.reporter.report(type="ERROR", msg=f"Poll error: {e}")
                 await asyncio.sleep(2)
 
     # Vanilla unlock blocking
@@ -743,12 +716,10 @@ class MKWiiContext(CommonContext):
                         self.dolphin.lock_item(name)
 
             for name in blocked:
-                logger.warning(f"Blocked vanilla unlock: {name}")
-                _report_handler(f"WARNING: Blocked vanilla unlock: {name}", self.dolphin_mgr)
+                self.reporter.report(type="WARNING", msg=f"Blocked vanilla unlock: {name}")
 
         except Exception as e:
-            console_logger.error(f"Error in vanilla unlock blocking: {e}")
-            _report_handler(f"ERROR: Error in vanilla unlock blocking: {e}", self.dolphin_mgr)
+            self.reporter.report(type="ERROR", msg=f"Error in vanilla unlock blocking: {e}")
 
     # Cup lock enforcement (RaceConfig redirect + race-level lap freeze)
 
@@ -789,12 +760,9 @@ class MKWiiContext(CommonContext):
                                 redirect_name = CUP_ID_TO_NAME.get(redirect_id, "?")
                                 self._redirected_for_current_race = True
                                 self._last_redirect_cc = cc  # Tie the flag to this specific CC
-                                console_logger.info(
-                                    f"Cup redirect: {selected_cup_name} {cc} -> {redirect_name} {cc}"
-                                )
-                                _report_handler(
-                                    f"INFO: Cup redirect: {selected_cup_name} {cc} -> {redirect_name} {cc}",
-                                    self.dolphin_mgr
+                                self.reporter.report(
+                                    type="INFO",
+                                    msg=f"Cup redirect: {selected_cup_name} {cc} -> {redirect_name} {cc}"
                                 )
 
             # Layer 2: Race-level lap freeze
@@ -815,12 +783,9 @@ class MKWiiContext(CommonContext):
                         cup_cc_key = f"{track_cup_name} {cc}"
                         if cup_cc_key not in self.unlocked_cups:
                             self._race_on_locked_cup = True
-                            console_logger.info(
-                                f"Race on locked cup: {track_cup_name} {cc}, freezing laps"
-                            )
-                            _report_handler(
-                                f"INFO: Race on locked cup: {track_cup_name} {cc}, freezing laps",
-                                self.dolphin_mgr
+                            self.reporter.report(
+                                type="INFO",
+                                msg=f"Race on locked cup: {track_cup_name} {cc}, freezing laps"
                             )
                         else:
                             self._race_on_locked_cup = False
@@ -837,7 +802,7 @@ class MKWiiContext(CommonContext):
             self._prev_in_race = in_race
 
         except Exception as e:
-            console_logger.debug(f"Cup lock enforcement error: {e}")
+            self.reporter.report(type="ERROR", msg=f"Cup lock enforcement error: {e}")
 
     # Character/vehicle lock enforcement (RaceConfig menu-scenario redirect)
 
@@ -911,24 +876,23 @@ class MKWiiContext(CommonContext):
                 old_veh = VEHICLE_ID_TO_NAME.get(vehicle_id, "?")
                 new_char = CHARACTER_ID_TO_NAME.get(new_character_id, "?")
                 new_veh = VEHICLE_ID_TO_NAME.get(new_vehicle_id, "?")
-                console_logger.info(
-                    f"Combo fix: {old_char}/{old_veh} -> {new_char}/{new_veh}"
-                )
-                _report_handler(
-                    f"INFO: Combo fix: {old_char}/{old_veh} -> {new_char}/{new_veh}",
-                    self.dolphin_mgr
+                self.reporter.report(
+                    type="INFO",
+                    msg=f"Combo fix: {old_char}/{old_veh} -> {new_char}/{new_veh}"
                 )
 
         except Exception as e:
-            console_logger.debug(f"Character/vehicle lock enforcement error: {e}")
+            self.reporter.report(type="ERROR", msg=f"Character/vehicle lock enforcement error: {e}")
 
     # Location checking
 
     def _build_location_lookup(self) -> None:
         from worlds.mkwii.locations import location_table
         self.location_name_to_id = {name: data.code for name, data in location_table.items()}
-        console_logger.info(f"Location lookup: {len(self.location_name_to_id)} entries")
-        _report_handler(f"INFO: Location lookup: {len(self.location_name_to_id)} entries", self.dolphin_mgr)
+        self.reporter.report(
+            type="INFO",
+            msg=f"Location lookup: {len(self.location_name_to_id)} entries"
+        )
 
     def _populate_tracker_from_checked(self) -> None:
         """Reconstruct completion state from previously checked location IDs."""
@@ -947,13 +911,10 @@ class MKWiiContext(CommonContext):
             if tier:
                 self._update_completion(cup, cc, tier)
 
-        console_logger.info(
-            f"Loaded {len(self.completed_locations)} completions from "
-            f"{len(self.checked_locations)} checked locations"
-        )
-        _report_handler(
-            f"INFO: Loaded {len(self.completed_locations)} completions from "
-            f"{len(self.checked_locations)} checked locations", self.dolphin_mgr
+        self.reporter.report(
+            type="INFO",
+            msg=f"Loaded {len(self.completed_locations)} completions from "
+                 f"{len(self.checked_locations)} checked locations"
         )
         launch_tracker(self)
 
@@ -1011,14 +972,12 @@ class MKWiiContext(CommonContext):
 
                     new_locations.append(loc_id)
                     self._pending_location_ids.add(loc_id)
-                    console_logger.info(f"New check: {loc_name}")
-                    _report_handler(f"INFO: New check: {loc_name}", self.dolphin_mgr)
+                    self.reporter.report(type="INFO", msg=f"New check: {loc_name}")
                     self._update_completion(cup_name, cc, tier)
 
         if new_locations:
             await self.send_msgs([{"cmd": "LocationChecks", "locations": new_locations}])
-            console_logger.info(f"Sent {len(new_locations)} location checks")
-            _report_handler(f"INFO: Sent {len(new_locations)} location checks", self.dolphin_mgr)
+            self.reporter.report(type="INFO", msg=f"Sent {len(new_locations)} location checks")
 
         self._pending_location_ids -= self.checked_locations
 
@@ -1031,10 +990,9 @@ class MKWiiContext(CommonContext):
         loc_id   = self.location_name_to_id.get(loc_name)
 
         if not loc_id:
-            console_logger.warning(f"[ItemSlot] No location ID for race check: {loc_name!r}")
-            _report_handler(
-                f"WARNING: [ItemSlot] No location ID for race check: {loc_name!r}",
-                self.dolphin_mgr
+            self.reporter.report(
+                type="WARNING",
+                msg=f"[ItemSlot] No location ID for race check: {loc_name!r}"
             )
             return
 
@@ -1043,8 +1001,7 @@ class MKWiiContext(CommonContext):
 
         self._pending_location_ids.add(loc_id)
         await self.send_msgs([{"cmd": "LocationChecks", "locations": [loc_id]}])
-        console_logger.info(f"[ItemSlot] Race check sent: {loc_name}")
-        _report_handler(f"INFO: [ItemSlot] Race check sent: {loc_name}", self.dolphin_mgr)
+        self.reporter.report(type="INFO", msg=f"[ItemSlot] Race check sent: {loc_name}")
 
     def _is_real_result(self, cup_id: int, cc: str, trophy: str, rank: str) -> bool:
         """Filter out fake trophies left over from a previous savestate."""
@@ -1122,7 +1079,7 @@ async def main() -> None:
         ctx.run_gui()
     ctx.run_cli()
 
-    print("\n  Commands: /status  /check  /loadstate  /hook  /reconnect")
+    print("\n  Commands: /status  /check  /hook")
     print("  Waiting for Dolphin...\n")
 
     try:

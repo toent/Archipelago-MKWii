@@ -10,21 +10,21 @@ import json
 import logging
 import os
 import shutil
-import subprocess
 import sys
 from typing import Optional
-from reporting import report_handler as _report_handler
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../.."))
 import Utils
 
+from reporting import ReportHandler
+
 logger = logging.getLogger("MKWii.Dolphin")
 
-GAME_ID = "RMCP01"
+GAME_ID_PAL = "RMCP01"
+GAME_ID_NTSC = "RMCE01"
+game_id = GAME_ID_PAL  # Default to PAL, can be changed by set_region() in dme_helpers.py
 CONFIG_FILENAME = "mkwii_ap_config.json"
-# BUNDLED_SAVESTATE = "Saves/Savestate/MKWii_AP_Savestate.sav"
 BUNDLED_EMPTY_SAVE = "Saves/Empty Save/rksys.dat"
-# SAVESTATE_SLOT = 1
 
 
 class DolphinManager:
@@ -39,6 +39,7 @@ class DolphinManager:
         # Running as normal Python script
             self._script_dir = os.path.dirname(os.path.abspath(__file__))
         
+        self.reporter = ReportHandler(mgr=self, logger=logger)
         self.config_path = os.path.join(self._script_dir, CONFIG_FILENAME)
         self.config = self._load_config()
         self._game_app = None
@@ -59,30 +60,7 @@ class DolphinManager:
             with open(self.config_path, "w") as f:
                 json.dump(self.config, f, indent=2)
         except Exception as e:
-            logger.warning(f"Could not save config: {e}")
-            _report_handler(f"WARNING: Could not save config: {e}", self)
-
-    # Path discovery
-
-    def get_dolphin_user_dir(self) -> str:
-        if self._dolphin_user_dir:
-            return self._dolphin_user_dir
-
-        docs = os.path.join(os.path.expanduser("~"), "Documents", "Dolphin Emulator")
-        if os.path.isdir(docs):
-            self._dolphin_user_dir = docs
-            return docs
-
-        roaming = os.path.join(os.environ.get("APPDATA", ""), "Dolphin Emulator")
-        if os.path.isdir(roaming):
-            self._dolphin_user_dir = roaming
-            return roaming
-
-        custom = self.config.get("dolphin_user_dir")
-        if custom and os.path.isdir(custom):
-            self._dolphin_user_dir = custom
-            return custom
-        return ""
+            self.reporter.report(type="WARNING", msg=f"Could not save config: {e}")
 
     # Save file picker
     def get_save_path(self) -> Optional[str]:
@@ -108,8 +86,7 @@ class DolphinManager:
             )
             return path or ""
         except Exception as e:
-            logger.error(f"File dialog failed: {e}")
-            _report_handler(f"ERROR: File dialog failed: {e}", self)
+            self.reporter.report(type="ERROR", msg=f"File dialog failed: {e}")
             path = input("Enter path to rksys.dat: ").strip().strip('"')
             return path or ""
 
@@ -119,7 +96,7 @@ class DolphinManager:
         try:
             from pywinauto import Application, findwindows
 
-            handles = findwindows.find_windows(title_re=r"(?i)Dolphin.*RMCP01", visible_only=True)
+            handles = findwindows.find_windows(title_re=rf"(?i)Dolphin.*{game_id}", visible_only=True)
             if not handles:
                 return False
             self._game_app = Application(backend="uia").connect(handle=handles[0])
@@ -194,33 +171,27 @@ class DolphinManager:
     def replace_save_with_empty(self) -> bool:
         save_path = self.get_save_path()
         if not save_path:
-            logger.error("No save file selected")
-            _report_handler("ERROR: No save file selected", self)
+            self.reporter.report(type="ERROR", msg="No save file selected")
             return False
 
         empty_save = os.path.join(self._script_dir, BUNDLED_EMPTY_SAVE)
         if not os.path.isfile(empty_save):
-            logger.error(f"Bundled empty save not found: {empty_save}")
-            _report_handler(f"ERROR: Bundled empty save not found: {empty_save}", self)
+            self.reporter.report(type="ERROR", msg=f"Bundled empty save not found: {empty_save}")
             return False
 
         backup_path = save_path + ".backup"
         try:
             shutil.copy2(save_path, backup_path)
-            logger.info(f"Backed up existing save to: {backup_path}")
-            _report_handler
+            self.reporter.report(type="INFO", msg=f"Backed up existing save to: {backup_path}")
         except Exception as e:
-            logger.warning(f"Failed to backup existing save: {e}")
-            _report_handler(f"WARNING: Failed to backup existing save: {e}", self)
+            self.reporter.report(type="WARNING", msg=f"Failed to backup existing save: {e}")
 
         try:
             shutil.copy2(empty_save, save_path)
-            logger.info("Replaced existing save with empty save")
-            _report_handler("INFO: Replaced existing save with empty save", self)
+            self.reporter.report(type="INFO", msg="Replaced existing save with empty save")
             return True
         except Exception as e:
-            logger.error(f"Failed to replace save with empty: {e}")
-            _report_handler(f"ERROR: Failed to replace save with empty: {e}", self)
+            self.reporter.report(type="ERROR", msg=f"Failed to replace save with empty: {e}")
             return False
 
     def show_tracker_auto_launch_selection(self) -> bool:
