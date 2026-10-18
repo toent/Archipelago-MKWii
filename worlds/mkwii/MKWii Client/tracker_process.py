@@ -1839,13 +1839,10 @@ class TrackerApp(App):
         unlocked_cups = state["unlocked_cups"]
 
         for (cup, cc), cell in self.cells.items():
-            tier = completed.get(f"{cup}||{cc}", "none")
-            if tier == "none":
-                cup_cc_key = f"{cup} {cc}"
-                if cup_cc_key in unlocked_cups:
-                    tier = "unlocked"
-                else:
-                    tier = "locked"
+            if f"{cup} {cc}" not in unlocked_cups:
+                tier = "locked"
+            else:
+                tier = completed.get(f"{cup}||{cc}", "unlocked")
             cell.set_tier(tier)
 
         for (track, cc), cell in self.tcells.items():
