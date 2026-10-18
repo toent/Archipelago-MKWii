@@ -334,6 +334,11 @@ class MKWiiContext(CommonContext):
             for cup_name, cc in starting_cups_iter:
                 item_name = f"{cup_name} {cc}"
                 self.unlocked_cups.add(item_name)
+                # Mirror starting cups must also unlock Mirror mode, or the vanilla blocker clears it
+                if "mirror" in item_name.lower():
+                    self.unlocked_modes.add("Mirror mode")
+                    if self.dolphin and self.dolphin.is_connected:
+                        self.dolphin.unlock_mirror_mode()
                 self.reporter.report(type="INFO", msg=f"Starting cup: {item_name}")
 
             # Load default character/vehicle locking state and seed the

@@ -432,6 +432,9 @@ for _t in TIER_HIERARCHY:
     TIER_NORMALIZE[_readable.title()] = _t
     TIER_NORMALIZE[_readable.lower()] = _t
 
+DEFAULT_ENABLED_CCS   = ["50cc", "100cc", "150cc"]
+DEFAULT_ENABLED_TIERS = ["3rd_place", "2nd_place", "1st_place", "1_star", "2_star"]
+
 
 _state_lock = threading.Lock()
 _state = {
@@ -482,17 +485,9 @@ def _ensure_ws_scheme(addr: str) -> str:
     return f"wss://{addr}"
 
 
-def _update_completion(completed: dict, cup: str, cc: str, tier: str) -> None:
-    key = f"{cup}||{cc}"
-    current = completed.get(key, "none")
-    ci = TIER_HIERARCHY.index(current) if current in TIER_HIERARCHY else -1
-    ni = TIER_HIERARCHY.index(tier)    if tier    in TIER_HIERARCHY else -1
-    if ni > ci:
-        completed[key] = tier
-
-
-def _parse_cup_location(name: str, completed: dict) -> None:
-    """Parse a cup GP location name like 'Mushroom Cup 50cc - 2nd place'."""
+def _parse_cup_location(name: str, checked_tiers: set) -> None:
+    """Parse a cup GP location name like 'Mushroom Cup 50cc - 2nd place'
+    and add (cup, cc, tier) to checked_tiers."""
     if " - " not in name:
         return
     cup_cc, tier_str = name.rsplit(" - ", 1)
@@ -504,7 +499,7 @@ def _parse_cup_location(name: str, completed: dict) -> None:
         return
     tier = TIER_NORMALIZE.get(tier_str)
     if tier:
-        _update_completion(completed, cup, cc, tier)
+        checked_tiers.add((cup, cc, tier))
 
 
 def _parse_track_location(name: str, track_locs: dict) -> None:
@@ -522,6 +517,64 @@ def _parse_track_location(name: str, track_locs: dict) -> None:
         if track in tracks:
             track_locs[f"{track}||{cc}"] = True
             return
+
+
+def _cup_rules_from_slot_data(slot_data: dict) -> dict:
+    """Read which CCs and tiers were generated as locations for this slot.
+
+    Mirrors the apworld failsafe: the goal_difficulty tier is always
+    generated for the goal_cc, even when it is not in enabled_cup_check_tiers.
+    """
+    enabled_ccs = list(slot_data.get("enabled_ccs", DEFAULT_ENABLED_CCS))
+    enabled_tiers = {
+        TIER_NORMALIZE.get(t, t)
+        for t in slot_data.get("enabled_cup_check_tiers", DEFAULT_ENABLED_TIERS)
+    }
+
+    goal_cc = slot_data.get("goal_cc", 2)
+    if isinstance(goal_cc, int):
+        goal_cc = CCS[goal_cc] if 0 <= goal_cc < len(CCS) else None
+
+    goal_diff = slot_data.get("goal_difficulty", 3)
+    if isinstance(goal_diff, int):
+        goal_tier = TIER_HIERARCHY[min(max(goal_diff, 0), len(TIER_HIERARCHY) - 1)]
+    else:
+        goal_tier = TIER_NORMALIZE.get(goal_diff)
+
+    return {
+        "enabled_ccs":   enabled_ccs,
+        "enabled_tiers": enabled_tiers,
+        "goal_cc":       goal_cc,
+        "goal_tier":     goal_tier,
+    }
+
+
+def _compute_completed(checked_tiers: set, rules: dict) -> dict[str, str]:
+    """Build the cup grid state from checked tiers.
+
+    A tier only counts if every enabled tier below it is also checked, so
+    tiers checked out of order (release or collect from another player's
+    goal) do not show until the gap below them is filled. Tiers that were
+    not generated for a CC are skipped and do not break the run.
+    """
+    completed: dict[str, str] = {}
+    for cup in CUPS:
+        for cc in rules["enabled_ccs"]:
+            tiers = set(rules["enabled_tiers"])
+            if cc == rules["goal_cc"] and rules["goal_tier"]:
+                tiers.add(rules["goal_tier"])
+
+            highest = None
+            for tier in TIER_HIERARCHY:
+                if tier not in tiers:
+                    continue
+                if (cup, cc, tier) not in checked_tiers:
+                    break
+                highest = tier
+
+            if highest:
+                completed[f"{cup}||{cc}"] = highest
+    return completed
 
 
 async def _ap_client_loop() -> None:
@@ -629,6 +682,7 @@ async def _ap_client_loop() -> None:
                 include_race = bool(slot_data.get("include_race_checks", True))
                 enable_items = bool(slot_data.get("enable_item_randomization", True))
                 trophies_required = int(slot_data.get("cups_required_for_goal", 6))
+                cup_rules    = _cup_rules_from_slot_data(slot_data)
                 _GAME_TO_AP = {v: k for k, v in {
                     "Powerup: Red Shell":           "Red Shell",
                     "Powerup: Triple Bananas":      "Triple Bananas",
@@ -657,7 +711,7 @@ async def _ap_client_loop() -> None:
                         starting_unlocked.append(ap_name)
 
                 checked_ids: list[int] = connected_msg.get("checked_locations", [])
-                completed: dict[str, str] = {}
+                checked_tiers: set[tuple[str, str, str]] = set()
                 track_locs: dict[str, bool] = {}
                 unlocked_items: list[str] = list(starting_unlocked)
 
@@ -712,8 +766,10 @@ async def _ap_client_loop() -> None:
                     name = id_to_name.get(loc_id)
                     if not name:
                         continue
-                    _parse_cup_location(name, completed)
+                    _parse_cup_location(name, checked_tiers)
                     _parse_track_location(name, track_locs)
+
+                completed = _compute_completed(checked_tiers, cup_rules)
 
                 victory_trophies = 0
                 for m in msgs:
@@ -802,7 +858,7 @@ async def _ap_client_loop() -> None:
                                 name = id_to_name.get(loc_id)
                                 if not name:
                                     continue
-                                _parse_cup_location(name, completed)
+                                _parse_cup_location(name, checked_tiers)
                                 _parse_track_location(name, track_locs)
                                 changed = True
 
@@ -810,6 +866,8 @@ async def _ap_client_loop() -> None:
                             pass
 
                     if changed:
+                        # Recompute so the prefix rule applies to new checks too
+                        completed = _compute_completed(checked_tiers, cup_rules)
                         _update_state(
                             completed_locations=completed,
                             track_locations=track_locs,
