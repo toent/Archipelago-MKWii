@@ -1,0 +1,124 @@
+{
+  "game": "RMCP01",
+  "icons": [
+    {
+      "name": "Mario",
+      "size": 8192,
+      "sha256": "b6fae2d5912336971945023d2046369cdccb777549e413252f1891dc21d13b01",
+      "probe_offset": 128,
+      "probe_crc32": 2898043851
+    },
+    {
+      "name": "Luigi",
+      "size": 8192,
+      "sha256": "2162bd3ebaa056fc79709845cd02cf47bccb37884611272dc46f10f8def34702",
+      "probe_offset": 192,
+      "probe_crc32": 2559444157
+    },
+    {
+      "name": "Peach",
+      "size": 8192,
+      "sha256": "4ab7fa1433e5aa5f00dbdd4facb35498f9ec0984979402486cd3dfedde587b14",
+      "probe_offset": 160,
+      "probe_crc32": 2621900353
+    },
+    {
+      "name": "Yoshi",
+      "size": 8192,
+      "sha256": "0cdb94727515c46e8119edbdac8c712522eb39b0bcf746a9bfa11e6396af5965",
+      "probe_offset": 768,
+      "probe_crc32": 4225944914
+    },
+    {
+      "name": "Toad",
+      "size": 8192,
+      "sha256": "79acf1a1c4fe646d715cf43f8dbf35d39bfc33c7cf2499485740c56a02631a33",
+      "probe_offset": 160,
+      "probe_crc32": 2230364897
+    },
+    {
+      "name": "Koopa Troopa",
+      "size": 8192,
+      "sha256": "756ebe5fd3b7623d35d90e51d81f31a76acbf28e3dc372cfac6e4dd62e599858",
+      "probe_offset": 704,
+      "probe_crc32": 643568650
+    },
+    {
+      "name": "Bowser",
+      "size": 8192,
+      "sha256": "4d29bc71c2316190d1682414bad47998d4089951df3d2449f686af732390fd9f",
+      "probe_offset": 224,
+      "probe_crc32": 1744237113
+    },
+    {
+      "name": "Donkey Kong",
+      "size": 8192,
+      "sha256": "a7fc42033e3881a0c33d3ce1f03fd35ffd7b381702f24eaffd2d2c0fd825c067",
+      "probe_offset": 128,
+      "probe_crc32": 1093452945
+    },
+    {
+      "name": "Wario",
+      "size": 8192,
+      "sha256": "f0e648752871fff3b6fa93b2b819d4e6508bbf730049a15e8cfd3ac24393da1a",
+      "probe_offset": 128,
+      "probe_crc32": 2209910231
+    },
+    {
+      "name": "Waluigi",
+      "size": 8192,
+      "sha256": "1dc7165d8d58be74bac0372e19e88a3f8703d782cd997b3e7bda96fd821ff085",
+      "probe_offset": 160,
+      "probe_crc32": 2384753274
+    },
+    {
+      "name": "Baby Mario",
+      "size": 8192,
+      "sha256": "54b921d0ca71d657d8d7a86e68a2e1a2a32c1d98ff47b2567caeffdcca7948be",
+      "probe_offset": 192,
+      "probe_crc32": 667985044
+    },
+    {
+      "name": "Baby Peach",
+      "size": 8192,
+      "sha256": "d80d56fb46283b1f58fe0bafb02459e6ec3023c6099ec54022910a4a3670c48d",
+      "probe_offset": 128,
+      "probe_crc32": 3707358656
+    },
+    {
+      "name": "Banana Cup",
+      "size": 32768,
+      "sha256": "2392142cee4bab9f49dee623605943289b0d1f953904e67815bf4f7520090f5f",
+      "probe_offset": 1536,
+      "probe_crc32": 2146881002
+    },
+    {
+      "name": "Flower Cup",
+      "size": 32768,
+      "sha256": "b3c74feb368e93db1a4d75c4a2d2d45421872619a4d5dcc7773335d8cd36687b",
+      "probe_offset": 352,
+      "probe_crc32": 2682667222
+    },
+    {
+      "name": "Mushroom Cup",
+      "size": 32768,
+      "sha256": "9988a5806cce811a769256dc2d5f9970a8e9a7c4139ea4eafdbfeae497d81a58",
+      "probe_offset": 512,
+      "probe_crc32": 2577574361
+    },
+    {
+      "name": "Shell Cup",
+      "size": 32768,
+      "sha256": "0393d2b9319af498809c6b48ddbb97b7d5e5fe0e814c0e9264c28250f470362e",
+      "probe_offset": 3456,
+      "probe_crc32": 3789161359
+    },
+    {
+      "name": "qmark64",
+      "size": 8192,
+      "sha256": "7b2d0fd065cb76641fe64b538e2d9ac6e7b55bd7396be74ac49d1f615d0e9ba5",
+      "probe_offset": 672,
+      "probe_crc32": 4074963845
+    }
+  ]
+}

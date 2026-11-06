@@ -20,20 +20,35 @@ Characters and cups (texture swap):
     the "?" texture. Cup icons are written back when the item unlocks. Character
     icons are not, the game reloads them whenever the selection opens, so they
     are checked often and get the "?" again after every reload.
-    The original and "?" bytes are read from local files and never ship with
-    the client (see ICON_ASSET_NOTES below).
+    The original and "?" bytes are local files in bins/ that are captured from
+    the player's own game, nothing of them ships with the client (see
+    icon_assets.py).
 
 All of it is research tested with PAL (RMCP01), see the vehicle lock notes.
 """
 from __future__ import annotations
 
 import asyncio
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Set, Tuple, TYPE_CHECKING
 
 from dme_helpers import MEM2, constant, read_bytes, read_region, read_u8, write_bytes, write_u8
-from dolphin_memory import BASE_CUP_NAMES, VEHICLE_ID_TO_NAME, character_weight_class
+from dolphin_memory import VEHICLE_ID_TO_NAME, character_weight_class
+from icon_assets import (
+    CHARACTER_ICON_SIZE,
+    CUP_ICON_SIZE,
+    MANIFEST_FILE,
+    QMARK_64_FILE,
+    QMARK_128_FILE,
+    Icon,
+    IconCapture,
+    default_icon_names,
+    ensure_qmark128,
+    load_icons,
+    load_manifest,
+)
 from reporting import ReportHandler
 
 if TYPE_CHECKING:
@@ -64,21 +79,6 @@ PANE_SET_GAP = 0x10000
 # Vehicle ids: position i (0 to 2) of weight class w is 3 * i + w for karts, and BIKE_ID_BASE + 3 * i + w for bikes (see VEHICLE_ID_TO_NAME).
 BIKE_ID_BASE = 0x12
 WEIGHT_INDEX = {"Small": 0, "Medium": 1, "Large": 2}
-
-# Icon textures (RGB5A3)
-# Character icons are 64x64 (2 bytes per pixel), cup icons are 128x128.
-CHARACTER_ICON_SIZE = 64 * 64 * 2
-CUP_ICON_SIZE = 128 * 128 * 2
-
-# ICON_ASSET_NOTES
-# Local files in the asset folder (bins/), all raw RGB5A3 tile data, none of them are committed or shipped:
-#   qmark64.bin, qmark128.bin   the "?" texture at both sizes
-#   <name>.bin                  the original icon, e.g. baby_peach.bin,
-#                               donkey_kong.bin, mushroom_cup.bin
-# Missing files only disable the texture swap for that icon. Startup warns about them and lists the unused .bin files, see ICON_FILE_ALIASES for the other names that are accepted.
-QMARK_64_FILE = "qmark64.bin"
-QMARK_128_FILE = "qmark128.bin"
-
 
 @dataclass
 class UnlockedItems:
@@ -239,104 +239,6 @@ class VehiclePaneLock:
 
 # Character and cup icon textures
 
-@dataclass
-class Icon:
-    original: bytes
-    qmark: bytes
-    # A short, distinctive slice of the original used to find it quickly.
-    probe_offset: int
-    probe: bytes
-    # Write the original back when the item unlocks. Character icons skip this because the game reloads them when the selection opens.
-    restore: bool = True
-
-
-def _file_stem(name: str) -> str:
-    # "Baby Peach" -> "baby_peach", "Mushroom Cup" -> "mushroom_cup"
-    return name.lower().replace(".", "").replace(" ", "_")
-
-
-# Other file names accepted for an icon, compared without case, spaces, dots, dashes and underscores. Other prefixes and suffixes are ignored too, so "chara_baby_peach_icon.bin" also works.
-ICON_FILE_ALIASES = {
-    "Donkey Kong": ("dk",),
-    "Koopa Troopa": ("koopa",),
-    "Baby Mario": ("bmario",),
-    "Baby Peach": ("bpeach",),
-}
-ICON_FILE_PREFIXES = ("character", "chara", "char", "icon")
-ICON_FILE_SUFFIXES = ("icon",)
-
-
-def _squash(text: str) -> str:
-    return "".join(c for c in text.lower() if c.isalnum())
-
-
-def _find_icon_file(asset_dir: Path, name: str, taken: Set[Path]) -> Optional[Path]:
-    exact = asset_dir / f"{_file_stem(name)}.bin"
-    if exact.exists():
-        return exact
-
-    wanted = {_squash(name), *(_squash(alias) for alias in ICON_FILE_ALIASES.get(name, ()))}
-    for path in sorted(asset_dir.glob("*.bin")):
-        stem = _squash(path.stem)
-        for prefix in ("",) + ICON_FILE_PREFIXES:
-            if not stem.startswith(prefix):
-                continue
-            core = stem[len(prefix):]
-            for suffix in ("",) + ICON_FILE_SUFFIXES:
-                if core.endswith(suffix) and core[:len(core) - len(suffix)] in wanted and path not in taken:
-                    return path
-    return None
-
-
-def _pick_probe(data: bytes, length: int = 32) -> Tuple[int, bytes]:
-    # A slice with many different bytes, so it rarely matches by accident.
-    # A slice of zeros would match half of memory.
-    for offset in range(0, len(data) - length, length):
-        chunk = data[offset:offset + length]
-        if len(set(chunk)) >= 8:
-            return offset, chunk
-    return 0, data[:length]
-
-
-def load_icons(
-    asset_dir: Path, names: List[str], size: int, qmark_file: str, restore: bool, reporter: ReportHandler
-) -> Dict[str, Icon]:
-    """Load the local original icons of the given names and the "?" texture."""
-    qmark_path = asset_dir / qmark_file
-    if not qmark_path.exists():
-        reporter.report(type="WARNING", msg=f"[MenuLock] {qmark_path} missing, skipping {size} byte icons")
-        return {}
-    qmark = qmark_path.read_bytes()
-    if len(qmark) != size:
-        reporter.report(type="WARNING", msg=f"[MenuLock] {qmark_file} is {len(qmark)} bytes, expected {size}")
-        return {}
-
-    icons: Dict[str, Icon] = {}
-    missing: List[str] = []
-    taken: Set[Path] = {qmark_path}
-    for name in names:
-        path = _find_icon_file(asset_dir, name, taken)
-        if path is None:
-            missing.append(name)
-            continue
-        taken.add(path)
-        original = path.read_bytes()
-        if len(original) != size:
-            reporter.report(type="WARNING", msg=f"[MenuLock] {path.name} is {len(original)} bytes, expected {size}")
-            continue
-        icons[name] = Icon(original, qmark, *_pick_probe(original), restore=restore)
-
-    if missing:
-        reporter.report(
-            type="WARNING", msg=f"[MenuLock] No original icon file in {asset_dir} for: {', '.join(missing)}"
-        )
-        # Show what is there so a naming mismatch is easy to spot
-        unused = sorted(p.name for p in asset_dir.glob("*.bin") if p not in taken and p.stat().st_size == size)
-        shown = ", ".join(unused[:30]) if unused else f"none, no unused {size} byte .bin files in that folder"
-        reporter.report(type="WARNING", msg=f"[MenuLock] Unused .bin files: {shown}")
-    return icons
-
-
 class IconTextures:
     """Swaps icon textures to the "?" and back, one write per change.
 
@@ -398,6 +300,14 @@ class IconTextures:
         self._prev_hits = hits
         self._have_baseline = True
 
+    def add_icons(self, icons: Dict[str, Icon]) -> None:
+        """Add icons that were captured after startup. Called from the event
+        loop only, never while a scan reads the icons."""
+        for name, icon in icons.items():
+            if name not in self._icons:
+                self._icons[name] = icon
+                self._reporter.report(type="DEBUG", msg=f"[MenuLock] Icon {name} added")
+
     def reset(self) -> None:
         # Menu memory is gone, forget the tracked copies and previous scan
         self._live.clear()
@@ -443,6 +353,15 @@ class IconTextures:
 
 # Coordinator
 
+def _default_manifest_path() -> Path:
+    # A manifest next to the exe wins, so it can be replaced without a rebuild. Otherwise the one bundled with the code is used (--add-data).
+    if getattr(sys, "frozen", False):
+        beside_exe = Path(sys.executable).parent / MANIFEST_FILE
+        if beside_exe.exists():
+            return beside_exe
+    return Path(__file__).with_name(MANIFEST_FILE)
+
+
 class MenuLock:
     """Keeps the menus in line with what the AP client has unlocked."""
 
@@ -452,21 +371,22 @@ class MenuLock:
         get_items: Callable[[], UnlockedItems],
         asset_dir: Path,
         reporter: ReportHandler,
+        manifest_path: Optional[Path] = None,
     ) -> None:
         """get_dolphin returns the memory manager only while it is hooked and
-        not in the middle of a savestate load, otherwise None."""
-        from worlds.mkwii.items import DEFAULT_CHARACTER_ITEMS
-
+        not in the middle of a savestate load, otherwise None. Icon files that
+        are missing in asset_dir are captured from the game, see icon_assets."""
         self._get_dolphin = get_dolphin
         self._get_items = get_items
+        self._asset_dir = asset_dir
         self._reporter = reporter
 
-        self._default_characters = [n.replace("Character: ", "", 1) for n in DEFAULT_CHARACTER_ITEMS]
-        self._default_cups = sorted(BASE_CUP_NAMES)
+        self._default_characters, self._default_cups = default_icon_names()
 
-        # Characters are not restored when they unlock, the game reloads them when the selection opens.
-        icons = load_icons(asset_dir, self._default_characters, CHARACTER_ICON_SIZE, QMARK_64_FILE, False, reporter)
-        icons.update(load_icons(asset_dir, self._default_cups, CUP_ICON_SIZE, QMARK_128_FILE, True, reporter))
+        manifest = load_manifest(manifest_path or _default_manifest_path(), reporter)
+        self._capture = IconCapture(asset_dir, manifest, MEM2_BASE, reporter)
+
+        icons = self._load_icons(quiet_missing=self._capture.pending())
         self._textures = IconTextures(icons, reporter)
         self._vehicles = VehiclePaneLock(reporter)
 
@@ -477,11 +397,31 @@ class MenuLock:
         self._in_race = False
 
         reporter.report(type="INFO", msg=f"[MenuLock] Ready, {len(icons)} icon textures available")
+        if self._capture.pending():
+            reporter.report(
+                type="INFO",
+                msg=f"[MenuLock] {len(self._capture.pending_names())} icon files are not in {asset_dir} yet. "
+                "Open the character select and the cup select once, they are captured from the game.",
+            )
 
-    def _scan(self) -> Tuple[List[Optional[PaneSet]], Dict[str, Set[int]]]:
-        # One MEM2 snapshot serves both scans. Runs in a worker thread.
+    def _load_icons(self, quiet_missing: bool = True) -> Dict[str, Icon]:
+        # The cup "?" is made from the character "?" once that has been captured.
+        ensure_qmark128(self._asset_dir, self._reporter)
+        # Characters are not restored when they unlock, the game reloads them when the selection opens.
+        icons = load_icons(
+            self._asset_dir, self._default_characters, CHARACTER_ICON_SIZE, QMARK_64_FILE, False, self._reporter,
+            quiet_missing,
+        )
+        icons.update(load_icons(
+            self._asset_dir, self._default_cups, CUP_ICON_SIZE, QMARK_128_FILE, True, self._reporter, quiet_missing,
+        ))
+        return icons
+
+    def _scan(self) -> Tuple[List[Optional[PaneSet]], Dict[str, Set[int]], List[str]]:
+        # One MEM2 snapshot serves all scans. Runs in a worker thread.
         snapshot = read_region(MEM2_BASE, MEM2_SIZE)
-        return find_pane_sets(snapshot), self._textures.find_hits(snapshot)
+        captured = self._capture.run(snapshot) if self._capture.due() else []
+        return find_pane_sets(snapshot), self._textures.find_hits(snapshot), captured
 
     def _apply_vehicle_locks(
         self, dolphin: "DolphinMemoryManager", sets: List[Optional[PaneSet]], cc: Optional[str]
@@ -527,9 +467,13 @@ class MenuLock:
 
             try:
                 self._rescan_requested = False
-                self._sets, hits = await asyncio.to_thread(self._scan)
+                self._sets, hits, captured = await asyncio.to_thread(self._scan)
                 self._textures.observe(hits)
                 self._last_scan = loop.time()
+                if captured:
+                    # Newly saved icons are tracked from the next scan on, the copies in memory count as new then
+                    self._textures.add_icons(self._load_icons())
+                    self._rescan_requested = True
             except Exception as e:
                 self._reporter.report(type="ERROR", msg=f"[MenuLock] Scan error: {e}")
                 await asyncio.sleep(2)
