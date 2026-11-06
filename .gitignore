@@ -211,3 +211,4 @@ itemqueues/
 tracker_crash.log
 crash.log
 "MKWii Client"/bins/
+make_icon_manifest.py
