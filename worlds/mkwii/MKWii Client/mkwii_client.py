@@ -37,6 +37,11 @@ Character/vehicle locking strategy:
     time between character/vehicle select and the race loading for a 0.5s
     poll tick to always land before the race scenario copy happens.
 
+Menu lock visuals (menu_lock.py):
+  - Locked default characters, cups and vehicles are drawn with the game's
+    own "?" in the menus. This is only a display, the lock above is what
+    actually stops the player. See menu_lock.py for how each one is drawn.
+
 Expected directory layout:
     Archipelago/
         CommonClient.py, NetUtils.py, ...
@@ -46,8 +51,10 @@ Expected directory layout:
             dolphin_memory.py
             dolphin_manager.py
             item_slot_manager.py
+            menu_lock.py
             tracker.py
             Saves/
+            bins/               (local menu icon files, not committed)
 """
 from __future__ import annotations
 import sys
@@ -88,6 +95,7 @@ from dolphin_memory import (
     VEHICLE_ID_TO_NAME, VEHICLE_NAME_TO_ID, resolve_combo,
 )
 from item_slot_manager import ItemSlotManager, AP_TO_GAME
+from menu_lock import MenuLock, UnlockedItems
 from tracker import launch_tracker
 from deathlink import DeathLinkBridge
 
@@ -217,6 +225,10 @@ class MKWiiContext(CommonContext):
         self.deathlink: Optional[DeathLinkBridge] = None
         self._deathlink_task: Optional[asyncio.Task] = None
 
+        # Menu lock visuals, created on Connected once the asset folder is known
+        self._menu_lock: Optional[MenuLock] = None
+        self._menu_lock_task: Optional[asyncio.Task] = None
+
         self.reporter = ReportHandler(mgr=self.dolphin_mgr, logger=console_logger)
 
     def _is_cup_unlocked_for_cc(self, cup_name: str, cc: str) -> bool:
@@ -268,11 +280,20 @@ class MKWiiContext(CommonContext):
                 return True
         return False
 
-    def _deathlink_mem(self) -> Optional[DolphinMemoryManager]:
-        # The bridge only touches memory while hooked and not mid savestate load.
+    def _connected_dolphin(self) -> Optional[DolphinMemoryManager]:
+        # Background tasks (DeathLink, menu lock) only touch memory while hooked and not mid savestate load.
         if self.dolphin and self.dolphin.is_connected and not self._loading_state:
             return self.dolphin
         return None
+
+    def _unlocked_items(self) -> UnlockedItems:
+        # The sets are shared, not copied, so the menu lock always sees the latest unlocks.
+        return UnlockedItems(
+            characters=self.unlocked_characters,
+            karts=self.unlocked_karts,
+            bikes=self.unlocked_bikes,
+            cups=self.unlocked_cups,
+        )
 
     async def _send_natural_death(self) -> None:
         deathlink_messages = [
@@ -414,10 +435,20 @@ class MKWiiContext(CommonContext):
             if not self._memory_poll_task:
                 self._memory_poll_task = asyncio.create_task(self._poll_dolphin())
 
+            # Menu "?" visuals for locked default items. The local icon files are read from bins/ next to the client, same base as itemqueues.
+            if not self._menu_lock_task:
+                self._menu_lock = MenuLock(
+                    get_dolphin = self._connected_dolphin,
+                    get_items   = self._unlocked_items,
+                    asset_dir   = base_dir / "bins",
+                    reporter    = self.reporter,
+                )
+                self._menu_lock_task = asyncio.create_task(self._menu_lock.run())
+
             if self.slot_data.get("death_link"):
                 amnesty = self.slot_data.get("death_link_amnesty", 1)
                 if self.deathlink is None:
-                    self.deathlink = DeathLinkBridge(self._send_natural_death, self._deathlink_mem, amnesty=amnesty, notify=logger.info)
+                    self.deathlink = DeathLinkBridge(self._send_natural_death, self._connected_dolphin, amnesty=amnesty, notify=logger.info)
                 self.deathlink.amnesty = amnesty
                 self.deathlink.currentAmnesty = 0
                 self.deathlink.set_respawn_time(self.slot_data.get("death_link_respawn_time", 25))
