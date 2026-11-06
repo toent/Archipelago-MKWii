@@ -69,6 +69,33 @@ def write_f32(addr: int, value: float) -> None:
     write(addr, F32, value)
 
 
+def read_bytes(addr: int, size: int) -> bytes:
+    return dme.read_bytes(addr, size)
+
+
+def write_bytes(addr: int, data: bytes) -> None:
+    dme.write_bytes(addr, data)
+
+
+def read_region(base: int, size: int, chunk: int = 0x100000) -> bytes:
+    # Read a large region in chunks, for scanning memory.
+    # If a chunk read fails, try reading it in smaller pieces. If a piece fails, fill it with zeroes.
+    buf = bytearray(size)
+    for offset in range(0, size, chunk):
+        length = min(chunk, size - offset)
+        try:
+            buf[offset:offset + length] = dme.read_bytes(base + offset, length)
+        except RuntimeError:
+            small = 0x10000
+            for sub in range(offset, offset + length, small):
+                part = min(small, offset + length - sub)
+                try:
+                    buf[sub:sub + part] = dme.read_bytes(base + sub, part)
+                except RuntimeError:
+                    pass
+    return bytes(buf)
+
+
 # Pointers
 
 def is_valid_ptr(addr: int) -> bool:

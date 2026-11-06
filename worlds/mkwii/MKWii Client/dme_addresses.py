@@ -52,6 +52,9 @@ layoutConstants = {
     "SAVE_LICENSE_STRIDE": (0x8CC0, 0x0),
     "SAVE_UNLOCK_START": (0x0038, 0x0),
     "UNLOCK_BYTE_COUNT": (8, 0x0),
+
+    # Menu layout panes, each pane name string has a twin copy this many bytes later.
+    "PANE_TWIN_STRIDE": (0xB8, 0x0),
 }
 
 class DMEAddressIndex:
