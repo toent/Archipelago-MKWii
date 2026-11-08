@@ -27,18 +27,19 @@ from BaseClasses import ItemClassification, Tutorial
 from worlds.AutoWorld import WebWorld, World
 
 from .items import (
-    MKWiiItem, ItemData, item_table, ALL_CUPS, ALL_CHARACTERS, ALL_KARTS, ALL_BIKES,
-    CHARACTER_WEIGHT_CLASS, VEHICLE_WEIGHT_CLASS,
+    MKWiiItem, ItemData, item_table, ALL_CUPS,
     CUP_CC_ITEMS, MODE_ITEMS, CHARACTER_ITEMS, DEFAULT_CHARACTER_ITEMS,
     KART_ITEMS, DEFAULT_KART_ITEMS, BIKE_ITEMS, DEFAULT_BIKE_ITEMS,
     POWERUP_ITEMS, TRAP_ITEMS, FILLER_ITEMS, SPECIAL_ITEMS,
 )
 from .locations import location_table, CUPS, DIFFICULTY_TIERS
+from .mkwii_info_lib import (
+    RACE_CHARACTERS, ALL_KARTS, ALL_BIKES, CHARACTER_WEIGHT_CLASS, VEHICLE_WEIGHT_CLASS,
+    WEIGHT_CLASSES, strip_suffix,
+)
 from .options import MKWiiOptions
 from .regions import create_regions
 from .rules import set_rules
-
-WEIGHT_CLASSES = ["Small", "Medium", "Large"]
 
 
 class MKWiiWeb(WebWorld):
@@ -130,7 +131,7 @@ class MKWiiWorld(World):
         starting_characters: typing.List[str] = []
         if self.options.lock_default_characters.value:
             for wc in classes:
-                candidates = [c for c in ALL_CHARACTERS if CHARACTER_WEIGHT_CLASS[c] == wc]
+                candidates = [c for c in RACE_CHARACTERS if CHARACTER_WEIGHT_CLASS[c] == wc]
                 starting_characters.append(self.random.choice(candidates))
 
         starting_kart = None
@@ -224,7 +225,7 @@ class MKWiiWorld(World):
         if self.options.enable_item_randomization.value:
             starting = self.options.starting_items.value
             for name in POWERUP_ITEMS:
-                game_name = name.replace(" (Unlock)", "", 1)
+                game_name = strip_suffix(name)
                 if game_name not in starting:
                     item_pool.append(self.create_item(name))
             needed_items = total_locations - len(item_pool)

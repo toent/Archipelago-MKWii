@@ -16,8 +16,11 @@ import sys
 import asyncio
 import threading
 from pathlib import Path
-from worlds.mkwii.mkwii_info_lib import (
-    CCS, TRACKS, TRACK_NAME_TO_CUP, ALL_CHARACTERS, VEHICLE_WEIGHT_CLASS, ALL_KARTS, 
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from mkwii_info_lib import (
+    CCS, TRACKS, TRACK_NAME_TO_CUP, ALL_CHARACTERS, VEHICLE_WEIGHT_CLASS, ALL_KARTS,
     ALL_BIKES, WEIGHT_CLASSES, POWERUP_ITEMS, KIND_OF_NAME, is_unlock, strip_suffix
 )
 

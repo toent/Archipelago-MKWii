@@ -247,57 +247,6 @@ ALL_CUPS = [
 ]
 
 
-# Weight class per character, keyed by the name used in item names
-# (e.g. "Character: Mario" -> "Mario"). Covers both save-bit and
-# default characters.
-CHARACTER_WEIGHT_CLASS: Dict[str, str] = {
-    "Mario": "Medium", "Baby Peach": "Small", "Waluigi": "Large", "Bowser": "Large",
-    "Baby Daisy": "Small", "Dry Bones": "Small", "Baby Mario": "Small", "Luigi": "Medium",
-    "Toad": "Small", "Donkey Kong": "Large", "Yoshi": "Medium", "Wario": "Large",
-    "Baby Luigi": "Small", "Toadette": "Small", "Koopa Troopa": "Small", "Daisy": "Medium",
-    "Peach": "Medium", "Birdo": "Medium", "Diddy Kong": "Medium", "King Boo": "Large",
-    "Bowser Jr.": "Medium", "Dry Bowser": "Large", "Funky Kong": "Large", "Rosalina": "Large",
-}
-
-# Weight class per vehicle, keyed by the name used in item names
-# (e.g. "Kart: Standard Kart S" -> "Standard Kart S"). Covers both
-# save-bit and default vehicles, karts and bikes both.
-VEHICLE_WEIGHT_CLASS: Dict[str, str] = {
-    "Standard Kart S": "Small", "Standard Kart M": "Medium", "Standard Kart L": "Large",
-    "Baby Booster": "Small", "Nostalgia 1": "Medium", "Offroader": "Large",
-    "Concerto": "Small", "Wild Wing": "Medium", "Flame Flyer": "Large",
-    "Cheep Charger": "Small", "Turbo Blooper": "Medium", "Piranha Prowler": "Large",
-    "Rally Romper": "Small", "Royal Racer": "Medium", "Aero Glider": "Large",
-    "Blue Falcon": "Small", "B. Dasher Mk 2": "Medium", "Dragonetti": "Large",
-    "Standard Bike S": "Small", "Standard Bike M": "Medium", "Standard Bike L": "Large",
-    "Bullet Bike": "Small", "Mach Bike": "Medium", "Bowser Bike": "Large",
-    "Nanobike": "Small", "Bon Bon": "Medium", "Wario Bike": "Large",
-    "Quacker": "Small", "Rapide": "Medium", "Twinkle Star": "Large",
-    "Magicruiser": "Small", "Nitrocycle": "Medium", "Torpedo": "Large",
-    "Bubble Bike": "Small", "Dolphin Dasher": "Medium", "Phantom": "Large",
-}
-
-# All character/kart/bike names, regardless of tier. Used for picking
-# starting characters/vehicles, which can come from either tier.
-ALL_CHARACTERS = list(CHARACTER_WEIGHT_CLASS.keys())
-ALL_KARTS = [
-    "Standard Kart S", "Standard Kart M", "Standard Kart L",
-    "Baby Booster", "Nostalgia 1", "Offroader",
-    "Concerto", "Wild Wing", "Flame Flyer",
-    "Cheep Charger", "Turbo Blooper", "Piranha Prowler",
-    "Rally Romper", "Royal Racer", "Aero Glider",
-    "Blue Falcon", "B. Dasher Mk 2", "Dragonetti",
-]
-ALL_BIKES = [
-    "Standard Bike S", "Standard Bike M", "Standard Bike L",
-    "Bullet Bike", "Mach Bike", "Bowser Bike",
-    "Nanobike", "Bon Bon", "Wario Bike",
-    "Quacker", "Rapide", "Twinkle Star",
-    "Magicruiser", "Nitrocycle", "Torpedo",
-    "Bubble Bike", "Dolphin Dasher", "Phantom",
-]
-
-
 # Combine all items
 item_table: Dict[str, ItemData] = {
     **CUP_CC_ITEMS,
