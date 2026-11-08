@@ -1,19 +1,56 @@
-from typing import Dict, Set
+from typing import Dict, List, Set
 
-CCS  = ["50cc", "100cc", "150cc", "Mirror"]
+# AP item name suffixes
+UNLOCK_SUFFIX = " (Unlock)"
+FILLER_SUFFIX = " (Filler)"
 
+
+def is_unlock(item_name: str) -> bool:
+    # Checks if the item is a powerup unlock item
+    return item_name.endswith(UNLOCK_SUFFIX)
+
+
+def is_filler(item_name: str) -> bool:
+    # Checks if the item is a filler item
+    return item_name.endswith(FILLER_SUFFIX)
+
+def strip_suffix(item_name: str) -> str:
+    # Remove a trailing (Unlock) or (Filler), if there is one
+    if item_name.endswith(UNLOCK_SUFFIX):
+        return item_name[:-len(UNLOCK_SUFFIX)]
+    if item_name.endswith(FILLER_SUFFIX):
+        return item_name[:-len(FILLER_SUFFIX)]
+    return item_name
+
+
+# CCs and cups
+CCS = ["50cc", "100cc", "150cc", "Mirror"]
+
+# CC byte in RaceConfig to CC string (Mirror is a separate byte)
 CC_BYTE_TO_NAME: Dict[int, str] = {
     0: "50cc",
     1: "100cc",
     2: "150cc",
 }
 
+# All cups in the game
 CUPS = [
     "Mushroom Cup", "Flower Cup", "Star Cup", "Special Cup",
     "Shell Cup", "Banana Cup", "Leaf Cup", "Lightning Cup",
 ]
 
-TRACKS = {
+# Cup ID in memory to bare PAL name, and the reverse mapping
+CUP_ID_TO_NAME: Dict[int, str] = {
+    0: "Mushroom Cup", 1: "Flower Cup", 2: "Star Cup", 3: "Special Cup",
+    4: "Shell Cup", 5: "Banana Cup", 6: "Leaf Cup", 7: "Lightning Cup",
+}
+CUP_NAME_TO_ID: Dict[str, int] = {v: k for k, v in CUP_ID_TO_NAME.items()}
+
+# Cups unlocked by default, without save file flags
+BASE_CUP_NAMES = {"Mushroom Cup", "Flower Cup", "Shell Cup", "Banana Cup"}
+
+# Every cup and their tracks
+TRACKS: Dict[str, List[str]] = {
     "Mushroom Cup": ["Luigi Circuit", "Moo Moo Meadows", "Mushroom Gorge", "Toad's Factory"],
     "Flower Cup": ["Mario Circuit", "Coconut Mall", "DK Summit", "Wario's Gold Mine"],
     "Star Cup": ["Daisy Circuit", "Koopa Cape", "Maple Treeway", "Grumble Volcano"],
@@ -24,10 +61,13 @@ TRACKS = {
     "Lightning Cup": ["SNES Mario Circuit 3", "DS Peach Gardens", "GCN DK Mountain", "N64 Bowser's Castle"],
 }
 
-_TRACK_TO_CUP: dict[str, str] = {
-    track: cup for cup, tracks in TRACKS.items() for track in tracks
-}
+# Track name to the cup it is in
+TRACK_NAME_TO_CUP: Dict[str, str] = {}
+for _cup, _tracks in TRACKS.items():
+    for _track in _tracks:
+        TRACK_NAME_TO_CUP[_track] = _cup
 
+# Every track ID in memory to its bare PAL name
 TRACK_ID_TO_NAME: Dict[int, str] = {
     0x08: "Luigi Circuit",
     0x01: "Moo Moo Meadows",
@@ -64,6 +104,8 @@ TRACK_ID_TO_NAME: Dict[int, str] = {
     0x1C: "N64 Bowser's Castle",
 }
 
+
+# Game items and their IDs in memory
 ITEM_ID: Dict[str, int] = {
     "Green Shell":        0x00,
     "Red Shell":          0x01,
@@ -86,6 +128,10 @@ ITEM_ID: Dict[str, int] = {
     "Triple Bananas":     0x12,
 }
 
+# The ID of the "empty" item, indicating the item slot is empty
+EMPTY_ITEM_ID = 0x14
+
+# AP item name to the game item it gives or unlocks
 AP_TO_ITEM: Dict[str, str] = {
     # Powerup unlocks
     "Red Shell (Unlock)":           "Red Shell",
@@ -103,30 +149,32 @@ AP_TO_ITEM: Dict[str, str] = {
     "Lightning (Unlock)":           "Lightning",
     "Triple Mushrooms (Unlock)":    "Triple Mushrooms",
     "Bullet Bill (Unlock)":         "Bullet Bill",
-    "Mushroom (Unlock)":          "Mushroom",
-    "Green Shell (Unlock)":       "Green Shell",
-    "Banana (Unlock)":            "Banana",
+    "Mushroom (Unlock)":            "Mushroom",
+    "Green Shell (Unlock)":         "Green Shell",
+    "Banana (Unlock)":              "Banana",
+
     # Filler items with explicit item targets
-    "Mushroom (Filler)":             "Mushroom",
-    "Triple Mushroom (Filler)":      "Triple Mushrooms",
-    "Golden Mushroom (Filler)":      "Golden Mushroom",
-    "Star (Filler)":                 "Star",
-    "Bullet Bill (Filler)":          "Bullet Bill",
-    "Mega Mushroom (Filler)":        "Mega Mushroom",
-    "Blue Shell (Filler)":           "Blue Shell",
-    "Red Shell (Filler)":            "Red Shell",
-    "Triple Red Shell (Filler)":     "Triple Red Shells",
-    "Bob-omb (Filler)":              "Bob-omb",
-    "Lightning (Filler)":            "Lightning",
-    "Blooper (Filler)":              "Blooper",
-    "POW Block (Filler)":            "POW Block",
+    "Mushroom (Filler)":            "Mushroom",
+    "Triple Mushroom (Filler)":     "Triple Mushrooms",
+    "Golden Mushroom (Filler)":     "Golden Mushroom",
+    "Star (Filler)":                "Star",
+    "Bullet Bill (Filler)":         "Bullet Bill",
+    "Mega Mushroom (Filler)":       "Mega Mushroom",
+    "Blue Shell (Filler)":          "Blue Shell",
+    "Red Shell (Filler)":           "Red Shell",
+    "Triple Red Shell (Filler)":    "Triple Red Shells",
+    "Bob-omb (Filler)":             "Bob-omb",
+    "Lightning (Filler)":           "Lightning",
+    "Blooper (Filler)":             "Blooper",
+    "POW Block (Filler)":           "POW Block",
 }
 
-EMPTY_ITEM_ID = 0x14
 
+# The three weight classes, in order of increasing weight
 WEIGHT_CLASSES = ["Small", "Medium", "Large"]
 
-CHARACTER_WEIGHT_CLASS: dict[str, str] = {
+# All characters and their respective weight classes. The Miis are not included here
+CHARACTER_WEIGHT_CLASS: Dict[str, str] = {
     "Mario": "Medium", "Baby Peach": "Small", "Waluigi": "Large", "Bowser": "Large",
     "Baby Daisy": "Small", "Dry Bones": "Small", "Baby Mario": "Small", "Luigi": "Medium",
     "Toad": "Small", "Donkey Kong": "Large", "Yoshi": "Medium", "Wario": "Large",
@@ -135,8 +183,13 @@ CHARACTER_WEIGHT_CLASS: dict[str, str] = {
     "Bowser Jr.": "Medium", "Dry Bowser": "Large", "Funky Kong": "Large", "Rosalina": "Large",
 }
 
-ALL_CHARACTERS = list(CHARACTER_WEIGHT_CLASS.keys()) + ["Mii Outfit A", "Mii Outfit B"]
+# The 24 characters that have a weight class. The Miis are not included here
+RACE_CHARACTERS = list(CHARACTER_WEIGHT_CLASS.keys())
 
+# Every character AP item, including the Miis
+ALL_CHARACTERS = RACE_CHARACTERS + ["Mii Outfit A", "Mii Outfit B"]
+
+# Every character ID in memory to its bare PAL name, and the reverse mapping
 CHARACTER_ID_TO_NAME: Dict[int, str] = {
     0x00: "Mario", 0x01: "Baby Peach", 0x02: "Waluigi", 0x03: "Bowser",
     0x04: "Baby Daisy", 0x05: "Dry Bones", 0x06: "Baby Mario", 0x07: "Luigi",
@@ -147,7 +200,9 @@ CHARACTER_ID_TO_NAME: Dict[int, str] = {
 }
 CHARACTER_NAME_TO_ID: Dict[str, int] = {v: k for k, v in CHARACTER_ID_TO_NAME.items()}
 
-VEHICLE_WEIGHT_CLASS: dict[str, str] = {
+
+# Vehicles and their weight classes
+VEHICLE_WEIGHT_CLASS: Dict[str, str] = {
     "Standard Kart S": "Small", "Standard Kart M": "Medium", "Standard Kart L": "Large",
     "Baby Booster": "Small", "Nostalgia 1": "Medium", "Offroader": "Large",
     "Concerto": "Small", "Wild Wing": "Medium", "Flame Flyer": "Large",
@@ -162,6 +217,7 @@ VEHICLE_WEIGHT_CLASS: dict[str, str] = {
     "Bubble Bike": "Small", "Dolphin Dasher": "Medium", "Phantom": "Large",
 }
 
+# All kart names (PAL)
 ALL_KARTS = [
     "Standard Kart S", "Standard Kart M", "Standard Kart L",
     "Baby Booster", "Nostalgia 1", "Offroader",
@@ -171,6 +227,7 @@ ALL_KARTS = [
     "Blue Falcon", "B. Dasher Mk 2", "Dragonetti",
 ]
 
+# All bike names (PAL)
 ALL_BIKES = [
     "Standard Bike S", "Standard Bike M", "Standard Bike L",
     "Bullet Bike", "Mach Bike", "Bowser Bike",
@@ -180,8 +237,7 @@ ALL_BIKES = [
     "Bubble Bike", "Dolphin Dasher", "Phantom",
 ]
 
-_ALL_VEHICLES = ALL_KARTS + ALL_BIKES
-
+# Vehicle ID in memory to bare PAL name
 VEHICLE_ID_TO_NAME: Dict[int, str] = {
     0x00: "Standard Kart S", 0x01: "Standard Kart M", 0x02: "Standard Kart L",
     0x03: "Baby Booster", 0x04: "Nostalgia 1", 0x05: "Offroader",
@@ -197,28 +253,69 @@ VEHICLE_ID_TO_NAME: Dict[int, str] = {
     0x21: "Bubble Bike", 0x22: "Dolphin Dasher", 0x23: "Phantom",
 }
 
-_VEHICLE_ALIASES: Set[frozenset] = {
-    frozenset({"Turbo Blooper", "Super Blooper"}),
-    frozenset({"Royal Racer", "Daytripper"}),
-    frozenset({"Rally Romper", "Tiny Titan"}),
-    frozenset({"Magicruiser", "Magikruiser"}),
-    frozenset({"B. Dasher Mk 2", "Sprinter"}),
-    frozenset({"Dragonetti", "Honeycoupe"}),
-    frozenset({"Aero Glider", "Jetsetter"}),
-    frozenset({"Twinkle Star", "Shooting Star"}),
-    frozenset({"Rapide", "Zip Zip"}),
-    frozenset({"Nitrocycle", "Sneakster"}),
-    frozenset({"Bubble Bike", "Jet Bubble"}),
-    frozenset({"Torpedo", "Spear"}),
-    frozenset({"Baby Booster", "Booster Seat"}),
-    frozenset({"Nostalgia 1", "Classic Dragster"}),
-    frozenset({"Concerto", "Mini Beast"}),
-    frozenset({"Bowser Bike", "Flame Runner"}),
-    frozenset({"Nanobike", "Bit Bike"}),
-    frozenset({"Bon Bon", "Sugarscoot"}),
+
+# What kind of AP item a bare name is, for handling received items
+KIND_OF_NAME: Dict[str, str] = {}
+for _name in ALL_CHARACTERS:
+    KIND_OF_NAME[_name] = "character"
+for _name in ALL_KARTS:
+    KIND_OF_NAME[_name] = "kart"
+for _name in ALL_BIKES:
+    KIND_OF_NAME[_name] = "bike"
+
+
+# Vehicle names that differ between PAL and NTSC
+PAL_TO_NTSC_VEHICLE: Dict[str, str] = {
+    "Turbo Blooper": "Super Blooper",
+    "Royal Racer": "Daytripper",
+    "Rally Romper": "Tiny Titan",
+    "Magicruiser": "Magikruiser",
+    "B. Dasher Mk 2": "Sprinter",
+    "Dragonetti": "Honeycoupe",
+    "Aero Glider": "Jetsetter",
+    "Twinkle Star": "Shooting Star",
+    "Rapide": "Zip Zip",
+    "Nitrocycle": "Sneakster",
+    "Bubble Bike": "Jet Bubble",
+    "Torpedo": "Spear",
+    "Baby Booster": "Booster Seat",
+    "Nostalgia 1": "Classic Dragster",
+    "Concerto": "Mini Beast",
+    "Bowser Bike": "Flame Runner",
+    "Nanobike": "Bit Bike",
+    "Bon Bon": "Sugarscoot",
 }
 
-_ALL_NTSC_VEHICLES = ALL_KARTS + ALL_BIKES
-for alias in _VEHICLE_ALIASES:
-    _ALL_NTSC_VEHICLES.remove(list(alias)[0])
+# Extra spellings of a PAL name that should also be recognised
+EXTRA_VEHICLE_SPELLINGS: Dict[str, str] = {
+    "B Dasher Mk 2": "B. Dasher Mk 2",
+}
 
+
+def get_vehicle_alternates(vehicle_name: str) -> Set[str]:
+    # All names a vehicle goes by: PAL name, NTSC name and extra spellings
+    pal_name = to_pal_vehicle_name(vehicle_name)
+    names = {pal_name}
+    if pal_name in PAL_TO_NTSC_VEHICLE:
+        names.add(PAL_TO_NTSC_VEHICLE[pal_name])
+    for spelling, target in EXTRA_VEHICLE_SPELLINGS.items():
+        if target == pal_name:
+            names.add(spelling)
+    return names
+
+
+def to_pal_vehicle_name(vehicle_name: str) -> str:
+    # Convert an NTSC name or extra spelling to the PAL name
+    if vehicle_name in EXTRA_VEHICLE_SPELLINGS:
+        return EXTRA_VEHICLE_SPELLINGS[vehicle_name]
+    for pal_name, ntsc_name in PAL_TO_NTSC_VEHICLE.items():
+        if vehicle_name == ntsc_name:
+            return pal_name
+    return vehicle_name
+
+
+# Every name of a vehicle (PAL, NTSC, extra spellings) to its ID
+VEHICLE_NAME_TO_ID: Dict[str, int] = {}
+for _vehicle_id, _vehicle_name in VEHICLE_ID_TO_NAME.items():
+    for _alt_name in get_vehicle_alternates(_vehicle_name):
+        VEHICLE_NAME_TO_ID[_alt_name] = _vehicle_id
