@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Set
 
 CCS  = ["50cc", "100cc", "150cc", "Mirror"]
 
@@ -196,3 +196,29 @@ VEHICLE_ID_TO_NAME: Dict[int, str] = {
     0x1E: "Magicruiser", 0x1F: "Nitrocycle", 0x20: "Torpedo",
     0x21: "Bubble Bike", 0x22: "Dolphin Dasher", 0x23: "Phantom",
 }
+
+_VEHICLE_ALIASES: Set[frozenset] = {
+    frozenset({"Turbo Blooper", "Super Blooper"}),
+    frozenset({"Royal Racer", "Daytripper"}),
+    frozenset({"Rally Romper", "Tiny Titan"}),
+    frozenset({"Magicruiser", "Magikruiser"}),
+    frozenset({"B. Dasher Mk 2", "Sprinter"}),
+    frozenset({"Dragonetti", "Honeycoupe"}),
+    frozenset({"Aero Glider", "Jetsetter"}),
+    frozenset({"Twinkle Star", "Shooting Star"}),
+    frozenset({"Rapide", "Zip Zip"}),
+    frozenset({"Nitrocycle", "Sneakster"}),
+    frozenset({"Bubble Bike", "Jet Bubble"}),
+    frozenset({"Torpedo", "Spear"}),
+    frozenset({"Baby Booster", "Booster Seat"}),
+    frozenset({"Nostalgia 1", "Classic Dragster"}),
+    frozenset({"Concerto", "Mini Beast"}),
+    frozenset({"Bowser Bike", "Flame Runner"}),
+    frozenset({"Nanobike", "Bit Bike"}),
+    frozenset({"Bon Bon", "Sugarscoot"}),
+}
+
+_ALL_NTSC_VEHICLES = ALL_KARTS + ALL_BIKES
+for alias in _VEHICLE_ALIASES:
+    _ALL_NTSC_VEHICLES.remove(list(alias)[0])
+
