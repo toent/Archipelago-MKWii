@@ -347,7 +347,7 @@ class ItemSlotManager:
         return True
 
     def _clear_slot(self) -> None:
-        write_named("ITEM_ID", U32, EMPTY_ID)
+        write_named("ITEM_ID", U32, EMPTY_ITEM_ID)
         write_named("ITEM_COUNT", U32, 0)
     
     # Race lifecycle
@@ -425,7 +425,7 @@ class ItemSlotManager:
             return
         self._prev_roulette_active = False
 
-        is_empty = (item_id == EMPTY_ID or count == 0)
+        is_empty = (item_id == EMPTY_ITEM_ID or count == 0)
         prev_was_empty = self.item_slot_was_empty
 
         if is_empty and not prev_was_empty:

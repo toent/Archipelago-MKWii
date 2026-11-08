@@ -89,15 +89,14 @@ from NetUtils import ClientStatus
 
 from dolphin_memory import (
     CHARACTER_IDS, VEHICLE_IDS, CUP_UNLOCK_IDS, MODE_IDS, ALL_UNLOCK_IDS,
-    CUP_TROPHY_IDS, DolphinMemoryManager, TRACK_TO_CUP, resolve_combo,
+    CUP_TROPHY_IDS, DolphinMemoryManager, TRACK_TO_CUP, resolve_combo, 
 )
 from worlds.mkwii.mkwii_info_lib import (
-    CUP_NAME_TO_ID, CUP_ID_TO_NAME,
-    CHARACTER_ID_TO_NAME, CHARACTER_NAME_TO_ID,
-    VEHICLE_ID_TO_NAME, VEHICLE_NAME_TO_ID,
-    get_vehicle_alternates,
+    CUP_NAME_TO_ID, CUP_ID_TO_NAME, CHARACTER_ID_TO_NAME, CHARACTER_NAME_TO_ID, AP_TO_ITEM,
+    VEHICLE_ID_TO_NAME, VEHICLE_NAME_TO_ID, get_vehicle_alternates, CCS, CUPS, TRACKS, 
+    is_unlock, is_filler, KIND_OF_NAME
 )
-from item_slot_manager import ItemSlotManager, AP_TO_GAME
+from item_slot_manager import ItemSlotManager
 from menu_lock import MenuLock, UnlockedItems
 from tracker import launch_tracker
 from deathlink import DeathLinkBridge
@@ -113,11 +112,6 @@ console_logger.setLevel(logging.DEBUG)
 
 # Tier ordering (index = strength, higher is better)
 TIER_HIERARCHY = ["3rd_place", "2nd_place", "1st_place", "1_star", "2_star", "3_star"]
-CC_NAMES = ["50cc", "100cc", "150cc", "Mirror"]
-CUPS = [
-    "Mushroom Cup", "Flower Cup", "Star Cup", "Special Cup",
-    "Shell Cup", "Banana Cup", "Leaf Cup", "Lightning Cup",
-]
 
 # Mapping from tier strings (various casings) to canonical form
 TIER_NORMALIZE: Dict[str, str] = {}
@@ -276,7 +270,6 @@ class MKWiiContext(CommonContext):
     @staticmethod
     def _is_track_in_cup(loc_name: str, cup_name: str, cc: str) -> bool:
         """Check if a location name is a race check for a track in the given cup."""
-        from worlds.mkwii.locations import TRACKS
         tracks = TRACKS.get(cup_name, [])
         for track in tracks:
             if loc_name.startswith(track) and f" {cc} - " in loc_name:
@@ -515,19 +508,17 @@ class MKWiiContext(CommonContext):
             # Counted from items_received in _update_victory_goal
             pass
 
-        elif "Character:" in item_name: #wont work anymore, due to AP name changes
-            char = item_name.replace("Character: ", "")
-            self.unlocked_characters.add(char)
-            self._apply_unlock(char, "character")
+        elif KIND_OF_NAME.get(item_name) == "character":
+            self.unlocked_characters.add(item_name)
+            self._apply_unlock(item_name, "character")
 
-        elif "Kart:" in item_name or "Bike:" in item_name: #wont work anymore, due to AP name changes
-            vehicle = item_name.replace("Kart: ", "").replace("Bike: ", "")
-            all_names = get_vehicle_alternates(vehicle)
-            if "Kart:" in item_name:
+        elif KIND_OF_NAME.get(item_name) in ("kart", "bike"):
+            all_names = get_vehicle_alternates(item_name)
+            if KIND_OF_NAME[item_name] == "kart":
                 self.unlocked_karts.update(all_names)
             else:
                 self.unlocked_bikes.update(all_names)
-            self._apply_unlock(vehicle, "vehicle")
+            self._apply_unlock(item_name, "vehicle")
 
         elif "Cup" in item_name and ("cc" in item_name.lower() or "mirror" in item_name.lower()):
             self.unlocked_cups.add(item_name)
@@ -548,12 +539,12 @@ class MKWiiContext(CommonContext):
             self._apply_unlock(item_name, "mode")
 
         elif (
-            "(Unlock)" in item_name
-            or "(Filler)" in item_name
+            is_unlock(item_name)
+            or is_filler(item_name)
             or item_name.endswith("Trap")
         ):
-            if "(Unlock)" in item_name and self._item_slot_mgr:
-                game_name = AP_TO_GAME.get(item_name)
+            if is_unlock(item_name) and self._item_slot_mgr:
+                game_name = AP_TO_ITEM.get(item_name)
                 if game_name:
                     self._item_slot_mgr.unlock_item_in_pool(game_name)
                     self.reporter.report(
@@ -622,8 +613,8 @@ class MKWiiContext(CommonContext):
             count = 0
             for loc_id in self.checked_locations:
                 name = id_to_name.get(loc_id)
-                if name and "(Unlock)" in name:
-                    game_name = AP_TO_GAME.get(name)
+                if name and is_unlock(name):
+                    game_name = AP_TO_ITEM.get(name)
                     if game_name:
                         self._item_slot_mgr.unlock_item_in_pool(game_name)
                         count += 1
@@ -990,7 +981,7 @@ class MKWiiContext(CommonContext):
         # even when that tier is not in enabled_cup_check_tiers. Mirror the same
         # failsafe here so those locations are actually sent as checks.
         goal_cc_idx = self.slot_data.get("goal_cc", 2)
-        goal_cc_str = CC_NAMES[goal_cc_idx] if isinstance(goal_cc_idx, int) else goal_cc_idx
+        goal_cc_str = CCS[goal_cc_idx] if isinstance(goal_cc_idx, int) else goal_cc_idx
         goal_diff_idx = self.slot_data.get("goal_difficulty", 3)
         goal_tier_str = TIER_HIERARCHY[min(goal_diff_idx, len(TIER_HIERARCHY) - 1)]
 

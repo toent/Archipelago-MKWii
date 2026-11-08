@@ -61,7 +61,7 @@ class Icon:
 
 def default_icon_names() -> Tuple[List[str], List[str]]:
     """Names of the default characters and cups, the ones that get locked."""
-    from dolphin_memory import BASE_CUP_NAMES
+    from worlds.mkwii.mkwii_info_lib import BASE_CUP_NAMES
     from worlds.mkwii.items import DEFAULT_CHARACTER_ITEMS
 
     characters = [n for n in DEFAULT_CHARACTER_ITEMS]
