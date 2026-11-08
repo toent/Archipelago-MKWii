@@ -702,12 +702,13 @@ async def _ap_client_loop() -> None:
                             # Cup unlock items: "{Cup Name} {cc}" e.g. "Mushroom Cup 50cc"
                             if "Cup" in iname and ("cc" in iname.lower() or "mirror" in iname.lower()):
                                 unlocked_cups.add(iname)
-                            if KIND_OF_NAME.get(iname) == "Character":
-                                unlocked_characters.add(iname[len("Character: "):])
-                            elif KIND_OF_NAME.get(iname) == "Kart":
-                                unlocked_karts.add(iname[len("Kart: "):])
-                            elif KIND_OF_NAME.get(iname) == "Bike":
-                                unlocked_bikes.add(iname[len("Bike: "):])
+                            kind = KIND_OF_NAME.get(iname)
+                            if kind == "character":
+                                unlocked_characters.add(iname)
+                            elif kind == "kart":
+                                unlocked_karts.add(iname)
+                            elif kind == "bike":
+                                unlocked_bikes.add(iname)
 
                 _update_state(
                     connected=True,
@@ -753,20 +754,18 @@ async def _ap_client_loop() -> None:
                                     if iname not in unlocked_cups:
                                         unlocked_cups.add(iname)
                                         changed = True
-                                if KIND_OF_NAME.get(iname) == "Character": #wont work anymore, due to AP name changes
-                                    name = iname[len("Character: "):]
-                                    if name not in unlocked_characters:
-                                        unlocked_characters.add(name)
+                                kind = KIND_OF_NAME.get(iname)
+                                if kind == "character":
+                                    if iname not in unlocked_characters:
+                                        unlocked_characters.add(iname)
                                         changed = True
-                                elif KIND_OF_NAME.get(iname) == "Kart": #wont work anymore, due to AP name changes
-                                    name = iname[len("Kart: "):]
-                                    if name not in unlocked_karts:
-                                        unlocked_karts.add(name)
+                                elif kind == "kart":
+                                    if iname not in unlocked_karts:
+                                        unlocked_karts.add(iname)
                                         changed = True
-                                elif KIND_OF_NAME.get(iname) == "Bike": #wont work anymore, due to AP name changes
-                                    name = iname[len("Bike: "):]
-                                    if name not in unlocked_bikes:
-                                        unlocked_bikes.add(name)
+                                elif kind == "bike":
+                                    if iname not in unlocked_bikes:
+                                        unlocked_bikes.add(iname)
                                         changed = True
 
                         elif cmd == "RoomUpdate":
