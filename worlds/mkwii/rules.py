@@ -12,10 +12,9 @@ from BaseClasses import CollectionState
 if typing.TYPE_CHECKING:
     from . import MKWiiWorld
 
-from .locations import CUPS
+from .mkwii_info_lib import CUPS
 
 
-CC_INDEX = ["50cc", "100cc", "150cc", "Mirror"]
 DIFFICULTY_INDEX = ["3rd_place", "2nd_place", "1st_place", "1_star", "2_star", "3_star"]
 
 
