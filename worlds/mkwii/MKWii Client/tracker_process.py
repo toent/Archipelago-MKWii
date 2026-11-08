@@ -16,7 +16,10 @@ import sys
 import asyncio
 import threading
 from pathlib import Path
-from worlds.mkwii.mkwii_info_lib import CCS, TRACKS, TRACK_NAME_TO_CUP, ALL_CHARACTERS, VEHICLE_WEIGHT_CLASS, ALL_KARTS, ALL_BIKES, WEIGHT_CLASSES, POWERUP_ITEMS
+from worlds.mkwii.mkwii_info_lib import (
+    CCS, TRACKS, TRACK_NAME_TO_CUP, ALL_CHARACTERS, VEHICLE_WEIGHT_CLASS, ALL_KARTS, 
+    ALL_BIKES, WEIGHT_CLASSES, POWERUP_ITEMS, KIND_OF_NAME, is_unlock, strip_suffix
+)
 
 import certifi
 
@@ -275,7 +278,7 @@ def _slice_item_icons() -> None:
             ch_off = (canvas_h - crop.shape[0]) // 2
             cw_off = (canvas_w - crop.shape[1]) // 2
             canvas[ch_off:ch_off+crop.shape[0], cw_off:cw_off+crop.shape[1]] = crop
-            fname = item.lower().replace(" (Unlock)", "").replace(" ", "_").replace("-", "") + ".png"
+            fname = strip_suffix(item).lower().replace(" ", "_").replace("-", "") + ".png"
             out = tmp_dir / fname
             PilImage.fromarray(canvas, "RGBA").save(str(out))
             ITEM_ICON_PATHS[item] = str(out)
@@ -694,16 +697,16 @@ async def _ap_client_loop() -> None:
                                 continue
                             if iname == "Victory Trophy":
                                 victory_trophies += 1
-                            if "(Unlock)" in iname and iname not in unlocked_items:
+                            if is_unlock(iname) and iname not in unlocked_items:
                                 unlocked_items.append(iname)
                             # Cup unlock items: "{Cup Name} {cc}" e.g. "Mushroom Cup 50cc"
                             if "Cup" in iname and ("cc" in iname.lower() or "mirror" in iname.lower()):
                                 unlocked_cups.add(iname)
-                            if iname.startswith("Character: "): #wont work anymore, due to AP name changes
+                            if KIND_OF_NAME.get(iname) == "Character":
                                 unlocked_characters.add(iname[len("Character: "):])
-                            elif iname.startswith("Kart: "): #wont work anymore, due to AP name changes
+                            elif KIND_OF_NAME.get(iname) == "Kart":
                                 unlocked_karts.add(iname[len("Kart: "):])
-                            elif iname.startswith("Bike: "): #wont work anymore, due to AP name changes
+                            elif KIND_OF_NAME.get(iname) == "Bike":
                                 unlocked_bikes.add(iname[len("Bike: "):])
 
                 _update_state(
@@ -743,24 +746,24 @@ async def _ap_client_loop() -> None:
                                 if iname == "Victory Trophy":
                                     victory_trophies += 1
                                     changed = True
-                                if "(Unlock)" in iname and iname not in unlocked_items:
+                                if is_unlock(iname) and iname not in unlocked_items:
                                     unlocked_items.append(iname)
                                     changed = True
                                 if "Cup" in iname and ("cc" in iname.lower() or "mirror" in iname.lower()):
                                     if iname not in unlocked_cups:
                                         unlocked_cups.add(iname)
                                         changed = True
-                                if iname.startswith("Character: "): #wont work anymore, due to AP name changes
+                                if KIND_OF_NAME.get(iname) == "Character": #wont work anymore, due to AP name changes
                                     name = iname[len("Character: "):]
                                     if name not in unlocked_characters:
                                         unlocked_characters.add(name)
                                         changed = True
-                                elif iname.startswith("Kart: "): #wont work anymore, due to AP name changes
+                                elif KIND_OF_NAME.get(iname) == "Kart": #wont work anymore, due to AP name changes
                                     name = iname[len("Kart: "):]
                                     if name not in unlocked_karts:
                                         unlocked_karts.add(name)
                                         changed = True
-                                elif iname.startswith("Bike: "): #wont work anymore, due to AP name changes
+                                elif KIND_OF_NAME.get(iname) == "Bike": #wont work anymore, due to AP name changes
                                     name = iname[len("Bike: "):]
                                     if name not in unlocked_bikes:
                                         unlocked_bikes.add(name)
@@ -1040,7 +1043,7 @@ class ItemCell:
 
     def __init__(self, name: str):
         self._name  = name
-        self._short = name.replace(" (Unlock)", "")
+        self._short = strip_suffix(name)
         # size_hint=(1,1) so GridLayout sizes the cell; canvas callbacks keep bg/border correct
         self.widget = FloatLayout(size_hint=(1, 1))
         with self.widget.canvas.before:

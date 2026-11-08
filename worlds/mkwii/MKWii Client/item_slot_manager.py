@@ -29,7 +29,7 @@ from pathlib import Path
 from random import choices, choice
 from typing import Callable, Deque, Dict, List, Optional, Set, Tuple
 
-from worlds.mkwii.mkwii_info_lib import ITEM_ID, EMPTY_ITEM_ID, TRACK_ID_TO_NAME, CC_BYTE_TO_NAME, AP_TO_ITEM
+from worlds.mkwii.mkwii_info_lib import ITEM_ID, EMPTY_ITEM_ID, TRACK_ID_TO_NAME, CC_BYTE_TO_NAME, AP_TO_ITEM, is_unlock
 from dme_helpers import U8, U32, base_address, is_valid_ptr, read_named, read_u8, write_named
 from reporting import ReportHandler
 
@@ -234,7 +234,7 @@ class ItemSlotManager:
         else:
             game_name = AP_TO_ITEM.get(ap_item_name)
             if game_name:
-                if ap_item_name.__contains__(" (Unlock)"):
+                if is_unlock(ap_item_name):
                     self._targeted_queue.append(game_name)
                     self.reporter.report(
                         type="INFO",
