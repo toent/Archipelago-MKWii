@@ -312,7 +312,7 @@ def _slice_item_icons() -> None:
             ch_off = (canvas_h - crop.shape[0]) // 2
             cw_off = (canvas_w - crop.shape[1]) // 2
             canvas[ch_off:ch_off+crop.shape[0], cw_off:cw_off+crop.shape[1]] = crop
-            fname = item.lower().replace("powerup: ", "").replace(" ", "_").replace("-", "") + ".png"
+            fname = item.lower().replace(" (Unlock)", "").replace(" ", "_").replace("-", "") + ".png"
             out = tmp_dir / fname
             PilImage.fromarray(canvas, "RGBA").save(str(out))
             ITEM_ICON_PATHS[item] = str(out)
@@ -1126,7 +1126,7 @@ class ItemCell:
 
     def __init__(self, name: str):
         self._name  = name
-        self._short = name.replace("Powerup: ", "")
+        self._short = name.replace(" (Unlock)", "")
         # size_hint=(1,1) so GridLayout sizes the cell; canvas callbacks keep bg/border correct
         self.widget = FloatLayout(size_hint=(1, 1))
         with self.widget.canvas.before:
