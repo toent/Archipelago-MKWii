@@ -64,7 +64,7 @@ def default_icon_names() -> Tuple[List[str], List[str]]:
     from dolphin_memory import BASE_CUP_NAMES
     from worlds.mkwii.items import DEFAULT_CHARACTER_ITEMS
 
-    characters = [n.replace("Character: ", "", 1) for n in DEFAULT_CHARACTER_ITEMS]
+    characters = [n for n in DEFAULT_CHARACTER_ITEMS]
     return characters, sorted(BASE_CUP_NAMES)
 
 

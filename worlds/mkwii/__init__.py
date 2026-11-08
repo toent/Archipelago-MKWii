@@ -183,8 +183,7 @@ class MKWiiWorld(World):
         # Characters with save bits: always in the pool, minus whichever
         # were picked as starting characters (the pick can land on either tier)
         for name in CHARACTER_ITEMS:
-            char = name.split(": ", 1)[1]
-            if char in self.starting_characters:
+            if name in self.starting_characters:
                 continue
             item_pool.append(self.create_item(name))
 
@@ -192,21 +191,18 @@ class MKWiiWorld(World):
         # whichever were picked as starting characters
         if self.options.lock_default_characters.value:
             for name in DEFAULT_CHARACTER_ITEMS:
-                char = name.split(": ", 1)[1]
-                if char in self.starting_characters:
+                if name in self.starting_characters:
                     continue
                 item_pool.append(self.create_item(name))
 
         # Karts/bikes with save bits: always in the pool, minus whichever
         # were picked as the starting kart/bike (the pick can land on either tier)
         for name in KART_ITEMS:
-            kart = name.split(": ", 1)[1]
-            if kart == self.starting_kart:
+            if name == self.starting_kart:
                 continue
             item_pool.append(self.create_item(name))
         for name in BIKE_ITEMS:
-            bike = name.split(": ", 1)[1]
-            if bike == self.starting_bike:
+            if name == self.starting_bike:
                 continue
             item_pool.append(self.create_item(name))
 
@@ -214,13 +210,11 @@ class MKWiiWorld(World):
         # whichever were picked as the starting kart/bike
         if self.options.lock_default_vehicles.value:
             for name in DEFAULT_KART_ITEMS:
-                kart = name.split(": ", 1)[1]
-                if kart == self.starting_kart:
+                if name == self.starting_kart:
                     continue
                 item_pool.append(self.create_item(name))
             for name in DEFAULT_BIKE_ITEMS:
-                bike = name.split(": ", 1)[1]
-                if bike == self.starting_bike:
+                if name == self.starting_bike:
                     continue
                 item_pool.append(self.create_item(name))
 

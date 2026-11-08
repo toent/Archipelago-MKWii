@@ -378,7 +378,7 @@ class MKWiiContext(CommonContext):
             else:
                 from worlds.mkwii.items import DEFAULT_CHARACTER_ITEMS
                 for name in DEFAULT_CHARACTER_ITEMS:
-                    self.unlocked_characters.add(name.replace("Character: ", "", 1))
+                    self.unlocked_characters.add(name)
                 self.reporter.report(
                     type="INFO",
                     msg="Default character locking off: all default characters unlocked"
@@ -396,9 +396,9 @@ class MKWiiContext(CommonContext):
             else:
                 from worlds.mkwii.items import DEFAULT_KART_ITEMS, DEFAULT_BIKE_ITEMS
                 for name in DEFAULT_KART_ITEMS:
-                    self.unlocked_karts.update(get_vehicle_alternates(name.replace("Kart: ", "", 1)))
+                    self.unlocked_karts.update(get_vehicle_alternates(name))
                 for name in DEFAULT_BIKE_ITEMS:
-                    self.unlocked_bikes.update(get_vehicle_alternates(name.replace("Bike: ", "", 1)))
+                    self.unlocked_bikes.update(get_vehicle_alternates(name))
                 self.reporter.report(
                     type="INFO",
                     msg="Default vehicle locking off: all default vehicles unlocked"
