@@ -9,7 +9,6 @@ def is_unlock(item_name: str) -> bool:
     # Checks if the item is a powerup unlock item
     return item_name.endswith(UNLOCK_SUFFIX)
 
-
 def is_filler(item_name: str) -> bool:
     # Checks if the item is a filler item
     return item_name.endswith(FILLER_SUFFIX)

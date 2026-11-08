@@ -16,7 +16,7 @@ import sys
 import asyncio
 import threading
 from pathlib import Path
-from worlds.mkwii.mkwii_info_lib import CCS, TRACKS, _TRACK_NAME_TO_CUP, ALL_CHARACTERS, VEHICLE_WEIGHT_CLASS, ALL_KARTS, ALL_BIKES, WEIGHT_CLASSES, POWERUP_ITEMS
+from worlds.mkwii.mkwii_info_lib import CCS, TRACKS, TRACK_NAME_TO_CUP, ALL_CHARACTERS, VEHICLE_WEIGHT_CLASS, ALL_KARTS, ALL_BIKES, WEIGHT_CLASSES, POWERUP_ITEMS
 
 import certifi
 
@@ -1761,7 +1761,7 @@ class TrackerApp(App):
 
         for (track, cc), cell in self.tcells.items():
             done         = track_locs.get(f"{track}||{cc}", False)
-            cup          = _TRACK_NAME_TO_CUP.get(track, "")
+            cup          = TRACK_NAME_TO_CUP.get(track, "")
             cup_unlocked = f"{cup} {cc}" in unlocked_cups
             cell.set_state(done=done, cup_unlocked=cup_unlocked)
 

@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Set, Tuple, TYPE_CHECKING
 
 from dme_helpers import MEM2, constant, read_bytes, read_region, read_u8, write_bytes, write_u8
-from dolphin_memory import VEHICLE_ID_TO_NAME, character_weight_class
+from dolphin_memory import character_weight_class
 from icon_assets import (
     CHARACTER_ICON_SIZE,
     CUP_ICON_SIZE,
@@ -50,6 +50,7 @@ from icon_assets import (
     load_manifest,
 )
 from reporting import ReportHandler
+from worlds.mkwii.mkwii_info_lib import VEHICLE_ID_TO_NAME
 
 if TYPE_CHECKING:
     from dolphin_memory import DolphinMemoryManager
