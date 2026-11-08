@@ -230,7 +230,7 @@ class MKWiiWorld(World):
         if self.options.enable_item_randomization.value:
             starting = self.options.starting_items.value
             for name in POWERUP_ITEMS:
-                game_name = name.replace("Powerup: ", "", 1)
+                game_name = name.replace(" (Unlock)", "", 1)
                 if game_name not in starting:
                     item_pool.append(self.create_item(name))
             needed_items = total_locations - len(item_pool)
@@ -251,7 +251,7 @@ class MKWiiWorld(World):
                 item_pool.append(self.create_filler())
         else:
             for _ in range(needed_items):
-                item_pool.append(self.create_item("Filler: Random Item"))
+                item_pool.append(self.create_item("Random Item (Filler)"))
 
         self.multiworld.itempool += item_pool
 
@@ -283,7 +283,7 @@ class MKWiiWorld(World):
     def create_filler(self) -> MKWiiItem:
         filler_weights = self._get_filler_weights()
         if not filler_weights:
-            return self.create_item("Filler: Random Item")
+            return self.create_item("Random Item (Filler)")
         names = list(filler_weights.keys())
         weights = list(filler_weights.values())
         return self.create_item(choices(names, weights=weights)[0])
@@ -335,19 +335,19 @@ class MKWiiWorld(World):
 
     def _get_filler_weights(self) -> typing.Dict[str, int]:
         mapping = {
-            "Filler: Random Item": self.options.filler_weight_random.value,
-            "Filler: Mushroom": self.options.filler_weight_mushroom.value,
-            "Filler: Triple Mushroom": self.options.filler_weight_triple_mushroom.value,
-            "Filler: Golden Mushroom": self.options.filler_weight_golden_mushroom.value,
-            "Filler: Star": self.options.filler_weight_star.value,
-            "Filler: Bullet Bill": self.options.filler_weight_bullet_bill.value,
-            "Filler: Mega Mushroom": self.options.filler_weight_mega_mushroom.value,
-            "Filler: Blue Shell": self.options.filler_weight_blue_shell.value,
-            "Filler: Red Shell": self.options.filler_weight_red_shell.value,
-            "Filler: Triple Red Shell": self.options.filler_weight_triple_red_shell.value,
-            "Filler: Bob-omb": self.options.filler_weight_bob_omb.value,
-            "Filler: Lightning": self.options.filler_weight_lightning_item.value,
-            "Filler: Blooper": self.options.filler_weight_blooper.value,
-            "Filler: POW Block": self.options.filler_weight_pow_block.value,
+            "Random Item (Filler)": self.options.filler_weight_random.value,
+            "Mushroom (Filler)": self.options.filler_weight_mushroom.value,
+            "Triple Mushroom (Filler)": self.options.filler_weight_triple_mushroom.value,
+            "Golden Mushroom (Filler)": self.options.filler_weight_golden_mushroom.value,
+            "Star (Filler)": self.options.filler_weight_star.value,
+            "Bullet Bill (Filler)": self.options.filler_weight_bullet_bill.value,
+            "Mega Mushroom (Filler)": self.options.filler_weight_mega_mushroom.value,
+            "Blue Shell (Filler)": self.options.filler_weight_blue_shell.value,
+            "Red Shell (Filler)": self.options.filler_weight_red_shell.value,
+            "Triple Red Shell (Filler)": self.options.filler_weight_triple_red_shell.value,
+            "Bob-omb (Filler)": self.options.filler_weight_bob_omb.value,
+            "Lightning (Filler)": self.options.filler_weight_lightning_item.value,
+            "Blooper (Filler)": self.options.filler_weight_blooper.value,
+            "POW Block (Filler)": self.options.filler_weight_pow_block.value,
         }
         return {k: v for k, v in mapping.items() if v > 0}

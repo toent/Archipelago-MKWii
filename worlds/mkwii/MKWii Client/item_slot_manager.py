@@ -136,38 +136,38 @@ GP_PROBS: Dict[str, List[int]] = {
 # AP item name in-game item name
 AP_TO_GAME: Dict[str, str] = {
     # Powerup unlocks
-    "Powerup: Red Shell":           "Red Shell",
-    "Powerup: Triple Bananas":      "Triple Bananas",
-    "Powerup: Triple Green Shells": "Triple Green Shells",
-    "Powerup: Triple Red Shells":   "Triple Red Shells",
-    "Powerup: Bob-omb":             "Bob-omb",
-    "Powerup: Blue Shell":          "Blue Shell",
-    "Powerup: Fake Item Box":       "Fake Item Box",
-    "Powerup: Star":                "Star",
-    "Powerup: Golden Mushroom":     "Golden Mushroom",
-    "Powerup: Mega Mushroom":       "Mega Mushroom",
-    "Powerup: Blooper":             "Blooper",
-    "Powerup: POW Block":           "POW Block",
-    "Powerup: Lightning":           "Lightning",
-    "Powerup: Triple Mushrooms":    "Triple Mushrooms",
-    "Powerup: Bullet Bill":         "Bullet Bill",
-    "Powerup: Mushroom":          "Mushroom",
-    "Powerup: Green Shell":       "Green Shell",
-    "Powerup: Banana":            "Banana",
+    "Red Shell (Unlock)":           "Red Shell",
+    "Triple Bananas (Unlock)":      "Triple Bananas",
+    "Triple Green Shells (Unlock)": "Triple Green Shells",
+    "Triple Red Shells (Unlock)":   "Triple Red Shells",
+    "Bob-omb (Unlock)":             "Bob-omb",
+    "Blue Shell (Unlock)":          "Blue Shell",
+    "Fake Item Box (Unlock)":       "Fake Item Box",
+    "Star (Unlock)":                "Star",
+    "Golden Mushroom (Unlock)":     "Golden Mushroom",
+    "Mega Mushroom (Unlock)":       "Mega Mushroom",
+    "Blooper (Unlock)":             "Blooper",
+    "POW Block (Unlock)":           "POW Block",
+    "Lightning (Unlock)":           "Lightning",
+    "Triple Mushrooms (Unlock)":    "Triple Mushrooms",
+    "Bullet Bill (Unlock)":         "Bullet Bill",
+    "Mushroom (Unlock)":          "Mushroom",
+    "Green Shell (Unlock)":       "Green Shell",
+    "Banana (Unlock)":            "Banana",
     # Filler items with explicit item targets
-    "Filler: Mushroom":             "Mushroom",
-    "Filler: Triple Mushroom":      "Triple Mushrooms",
-    "Filler: Golden Mushroom":      "Golden Mushroom",
-    "Filler: Star":                 "Star",
-    "Filler: Bullet Bill":          "Bullet Bill",
-    "Filler: Mega Mushroom":        "Mega Mushroom",
-    "Filler: Blue Shell":           "Blue Shell",
-    "Filler: Red Shell":            "Red Shell",
-    "Filler: Triple Red Shell":     "Triple Red Shells",
-    "Filler: Bob-omb":              "Bob-omb",
-    "Filler: Lightning":            "Lightning",
-    "Filler: Blooper":              "Blooper",
-    "Filler: POW Block":            "POW Block",
+    "Mushroom (Filler)":             "Mushroom",
+    "Triple Mushroom (Filler)":      "Triple Mushrooms",
+    "Golden Mushroom (Filler)":      "Golden Mushroom",
+    "Star (Filler)":                 "Star",
+    "Bullet Bill (Filler)":          "Bullet Bill",
+    "Mega Mushroom (Filler)":        "Mega Mushroom",
+    "Blue Shell (Filler)":           "Blue Shell",
+    "Red Shell (Filler)":            "Red Shell",
+    "Triple Red Shell (Filler)":     "Triple Red Shells",
+    "Bob-omb (Filler)":              "Bob-omb",
+    "Lightning (Filler)":            "Lightning",
+    "Blooper (Filler)":              "Blooper",
+    "POW Block (Filler)":            "POW Block",
 }
 
 # Traps that have a direct in-game item equivalent (overwrites item slot immediately)
@@ -178,7 +178,7 @@ TRAP_TO_GAME: Dict[str, str] = {
 # Traps held for future memory-effect implementation (no current in-game action)
 FUTURE_EFFECT_TRAPS: Set[str] = {"Brake Trap", "Gas Trap", "Boost Trap","POW Trap","Lightning Trap"}
 
-# Internal sentinel for "Filler: Random Item"
+# Internal sentinel for "Random Item (Filler)"
 _RANDOM_TOKEN = "__random__"
 
 
@@ -328,21 +328,21 @@ class ItemSlotManager:
                 msg=f"[ItemSlot] Future trap queued (no current effect): {ap_item_name}"
             )
 
-        elif ap_item_name == "Filler: Random Item":
+        elif ap_item_name == "Random Item (Filler)":
             self._filler_queue.append(_RANDOM_TOKEN)
             self.reporter.report(
                 type="INFO",
-                msg="[ItemSlot] Filler: Random Item queued (resolves at give-time)"
+                msg="[ItemSlot] 'Random Item (Filler)' queued (resolves at give-time)"
             )
 
         else:
             game_name = AP_TO_GAME.get(ap_item_name)
             if game_name:
-                if ap_item_name.startswith("Powerup:"):
+                if ap_item_name.__contains__(" (Unlock)"):
                     self._targeted_queue.append(game_name)
                     self.reporter.report(
                         type="INFO",
-                        msg=f"[ItemSlot] Targeted powerup queued: {ap_item_name} -> {game_name}"
+                        msg=f"[ItemSlot] Targeted item unlock queued: {ap_item_name} -> {game_name}"
                     )
                 else:
                     self._filler_queue.append(game_name)
