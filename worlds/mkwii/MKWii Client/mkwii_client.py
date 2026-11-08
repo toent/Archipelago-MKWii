@@ -511,12 +511,12 @@ class MKWiiContext(CommonContext):
             # Counted from items_received in _update_victory_goal
             pass
 
-        elif "Character:" in item_name:
+        elif "Character:" in item_name: #wont work anymore, due to AP name changes
             char = item_name.replace("Character: ", "")
             self.unlocked_characters.add(char)
             self._apply_unlock(char, "character")
 
-        elif "Kart:" in item_name or "Bike:" in item_name:
+        elif "Kart:" in item_name or "Bike:" in item_name: #wont work anymore, due to AP name changes
             vehicle = item_name.replace("Kart: ", "").replace("Bike: ", "")
             all_names = get_vehicle_alternates(vehicle)
             if "Kart:" in item_name:
@@ -544,11 +544,11 @@ class MKWiiContext(CommonContext):
             self._apply_unlock(item_name, "mode")
 
         elif (
-            item_name.startswith("Powerup:")
-            or item_name.startswith("Filler:")
+            "(Unlock)" in item_name
+            or "(Filler)" in item_name
             or item_name.endswith("Trap")
         ):
-            if item_name.startswith("Powerup:") and self._item_slot_mgr:
+            if "(Unlock)" in item_name and self._item_slot_mgr:
                 game_name = AP_TO_GAME.get(item_name)
                 if game_name:
                     self._item_slot_mgr.unlock_item_in_pool(game_name)
@@ -618,7 +618,7 @@ class MKWiiContext(CommonContext):
             count = 0
             for loc_id in self.checked_locations:
                 name = id_to_name.get(loc_id)
-                if name and name.startswith("Powerup:"):
+                if name and "(Unlock)" in name:
                     game_name = AP_TO_GAME.get(name)
                     if game_name:
                         self._item_slot_mgr.unlock_item_in_pool(game_name)
