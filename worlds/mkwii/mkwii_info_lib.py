@@ -169,6 +169,9 @@ AP_TO_ITEM: Dict[str, str] = {
     "POW Block (Filler)":           "POW Block",
 }
 
+POWERUP_ITEMS: Dict[str, str] = {ap: item for ap, item in AP_TO_ITEM.items() if is_unlock(ap)}
+FILLER_ITEMS: Dict[str, str] = {ap: item for ap, item in AP_TO_ITEM.items() if is_filler(ap)}
+
 
 # The three weight classes, in order of increasing weight
 WEIGHT_CLASSES = ["Small", "Medium", "Large"]

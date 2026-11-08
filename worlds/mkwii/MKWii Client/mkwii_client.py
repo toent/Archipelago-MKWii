@@ -88,10 +88,13 @@ from NetUtils import ClientStatus
 
 from dolphin_memory import (
     CHARACTER_IDS, VEHICLE_IDS, CUP_UNLOCK_IDS, MODE_IDS, ALL_UNLOCK_IDS,
-    CUP_TROPHY_IDS, DolphinMemoryManager, get_vehicle_alternates,
-    CUP_NAME_TO_ID, CUP_ID_TO_NAME, TRACK_TO_CUP,
+    CUP_TROPHY_IDS, DolphinMemoryManager, TRACK_TO_CUP, resolve_combo,
+)
+from worlds.mkwii.mkwii_info_lib import (
+    CUP_NAME_TO_ID, CUP_ID_TO_NAME,
     CHARACTER_ID_TO_NAME, CHARACTER_NAME_TO_ID,
-    VEHICLE_ID_TO_NAME, VEHICLE_NAME_TO_ID, resolve_combo,
+    VEHICLE_ID_TO_NAME, VEHICLE_NAME_TO_ID,
+    get_vehicle_alternates,
 )
 from item_slot_manager import ItemSlotManager, AP_TO_GAME
 from menu_lock import MenuLock, UnlockedItems
