@@ -89,7 +89,7 @@ from NetUtils import ClientStatus
 
 from dolphin_memory import (
     CHARACTER_IDS, VEHICLE_IDS, CUP_UNLOCK_IDS, MODE_IDS, ALL_UNLOCK_IDS,
-    CUP_TROPHY_IDS, DolphinMemoryManager, TRACK_TO_CUP, resolve_combo, 
+    DolphinMemoryManager, TRACK_TO_CUP, resolve_combo, 
 )
 from worlds.mkwii.mkwii_info_lib import (
     CUP_NAME_TO_ID, CUP_ID_TO_NAME, CHARACTER_ID_TO_NAME, CHARACTER_NAME_TO_ID, AP_TO_ITEM,
@@ -987,7 +987,7 @@ class MKWiiContext(CommonContext):
 
         new_locations: list[int] = []
 
-        for cup_name, cup_id in CUP_TROPHY_IDS.items():
+        for cup_name, cup_id in CUP_NAME_TO_ID.items():
             for cc in enabled_ccs:
                 trophy, rank = self.dolphin.get_gp_result(cup_id, cc)
 
