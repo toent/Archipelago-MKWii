@@ -16,6 +16,7 @@ import sys
 import asyncio
 import threading
 from pathlib import Path
+from worlds.mkwii.mkwii_info_lib import CCS, TRACKS, _TRACK_NAME_TO_CUP, ALL_CHARACTERS, VEHICLE_WEIGHT_CLASS, ALL_KARTS, ALL_BIKES, WEIGHT_CLASSES, POWERUP_ITEMS
 
 import certifi
 
@@ -214,44 +215,6 @@ def _slice_cup_icons() -> None:
 
 _slice_cup_icons()
 
-CCS  = ["50cc", "100cc", "150cc", "Mirror"]
-
-TRACKS = {
-    "Mushroom Cup":  ["Luigi Circuit", "Moo Moo Meadows", "Mushroom Gorge", "Toad's Factory"],
-    "Flower Cup":    ["Mario Circuit", "Coconut Mall", "DK Summit", "Wario's Gold Mine"],
-    "Star Cup":      ["Daisy Circuit", "Koopa Cape", "Maple Treeway", "Grumble Volcano"],
-    "Special Cup":   ["Dry Dry Ruins", "Moonview Highway", "Bowser's Castle", "Rainbow Road"],
-    "Shell Cup":     ["GCN Peach Beach", "DS Yoshi Falls", "SNES Ghost Valley 2", "N64 Mario Raceway"],
-    "Banana Cup":    ["N64 Sherbet Land", "GBA Shy Guy Beach", "DS Delfino Square", "GCN Waluigi Stadium"],
-    "Leaf Cup":      ["DS Desert Hills", "GBA Bowser's Castle 3", "N64 DK's Jungle Parkway", "GCN Mario Circuit"],
-    "Lightning Cup": ["SNES Mario Circuit 3", "DS Peach Gardens", "GCN DK Mountain", "N64 Bowser's Castle"],
-}
-
-_TRACK_TO_CUP: dict[str, str] = {
-    track: cup for cup, tracks in TRACKS.items() for track in tracks
-}
-
-POWERUP_ITEMS = [
-    "Red Shell (Unlock)",
-    "Triple Bananas (Unlock)",
-    "Triple Green Shells (Unlock)",
-    "Triple Red Shells (Unlock)",
-    "Bob-omb (Unlock)",
-    "Blue Shell (Unlock)",
-    "Fake Item Box (Unlock)",
-    "Star (Unlock)",
-    "Golden Mushroom (Unlock)",
-    "Mega Mushroom (Unlock)",
-    "Blooper (Unlock)",
-    "POW Block (Unlock)",
-    "Lightning (Unlock)",
-    "Triple Mushrooms (Unlock)",
-    "Bullet Bill (Unlock)",
-    "Mushroom (Unlock)",
-    "Green Shell (Unlock)",
-    "Banana (Unlock)",
-]
-
 _ITEM_SPRITESHEET = _HERE / "img" / "item_icons.png"
 _ITEM_GRID_COLS = 9
 _ITEM_GRID_POS = {
@@ -321,55 +284,6 @@ def _slice_item_icons() -> None:
 
 
 _slice_item_icons()
-
-# Characters and vehicles. Names match the AP item names in worlds.mkwii.items
-# exactly (e.g. "Character: Mario" -> "Mario"), so no translation is needed
-# between item names and display names. Weight class here is the in-game
-# kart-compatibility class (small/medium/large), same table as
-# worlds.mkwii.items.CHARACTER_WEIGHT_CLASS / VEHICLE_WEIGHT_CLASS, not the
-# grouping used by the character_icons.png sprite sheet's own labels.
-CHARACTER_WEIGHT_CLASS: dict[str, str] = {
-    "Mario": "Medium", "Baby Peach": "Small", "Waluigi": "Large", "Bowser": "Large",
-    "Baby Daisy": "Small", "Dry Bones": "Small", "Baby Mario": "Small", "Luigi": "Medium",
-    "Toad": "Small", "Donkey Kong": "Large", "Yoshi": "Medium", "Wario": "Large",
-    "Baby Luigi": "Small", "Toadette": "Small", "Koopa Troopa": "Small", "Daisy": "Medium",
-    "Peach": "Medium", "Birdo": "Medium", "Diddy Kong": "Medium", "King Boo": "Large",
-    "Bowser Jr.": "Medium", "Dry Bowser": "Large", "Funky Kong": "Large", "Rosalina": "Large",
-}
-# Mii has no fixed weight class in-game, shown but not grouped by class.
-CHARACTERS = list(CHARACTER_WEIGHT_CLASS.keys()) + ["Mii Outfit A", "Mii Outfit B"]
-
-VEHICLE_WEIGHT_CLASS: dict[str, str] = {
-    "Standard Kart S": "Small", "Standard Kart M": "Medium", "Standard Kart L": "Large",
-    "Baby Booster": "Small", "Nostalgia 1": "Medium", "Offroader": "Large",
-    "Concerto": "Small", "Wild Wing": "Medium", "Flame Flyer": "Large",
-    "Cheep Charger": "Small", "Turbo Blooper": "Medium", "Piranha Prowler": "Large",
-    "Rally Romper": "Small", "Royal Racer": "Medium", "Aero Glider": "Large",
-    "Blue Falcon": "Small", "B. Dasher Mk 2": "Medium", "Dragonetti": "Large",
-    "Standard Bike S": "Small", "Standard Bike M": "Medium", "Standard Bike L": "Large",
-    "Bullet Bike": "Small", "Mach Bike": "Medium", "Bowser Bike": "Large",
-    "Nanobike": "Small", "Bon Bon": "Medium", "Wario Bike": "Large",
-    "Quacker": "Small", "Rapide": "Medium", "Twinkle Star": "Large",
-    "Magicruiser": "Small", "Nitrocycle": "Medium", "Torpedo": "Large",
-    "Bubble Bike": "Small", "Dolphin Dasher": "Medium", "Phantom": "Large",
-}
-KARTS = [
-    "Standard Kart S", "Standard Kart M", "Standard Kart L",
-    "Baby Booster", "Nostalgia 1", "Offroader",
-    "Concerto", "Wild Wing", "Flame Flyer",
-    "Cheep Charger", "Turbo Blooper", "Piranha Prowler",
-    "Rally Romper", "Royal Racer", "Aero Glider",
-    "Blue Falcon", "B. Dasher Mk 2", "Dragonetti",
-]
-BIKES = [
-    "Standard Bike S", "Standard Bike M", "Standard Bike L",
-    "Bullet Bike", "Mach Bike", "Bowser Bike",
-    "Nanobike", "Bon Bon", "Wario Bike",
-    "Quacker", "Rapide", "Twinkle Star",
-    "Magicruiser", "Nitrocycle", "Torpedo",
-    "Bubble Bike", "Dolphin Dasher", "Phantom",
-]
-WEIGHT_CLASSES = ["Small", "Medium", "Large"]
 
 _CHARACTER_SPRITESHEET = _HERE / "img" / "character_icons.png"
 
@@ -1702,7 +1616,7 @@ class TrackerApp(App):
         grid = GridLayout(cols=COLS, spacing=SPACING, padding=0,
                           size_hint=(1, 1))
 
-        for name in CHARACTERS:
+        for name in ALL_CHARACTERS:
             cell = CharacterCell(name)
             self.ccells[name] = cell
             grid.add_widget(cell.widget)
@@ -1738,8 +1652,8 @@ class TrackerApp(App):
             outer.add_widget(hdr)
 
             names = (
-                [k for k in KARTS if VEHICLE_WEIGHT_CLASS[k] == weight_class]
-                + [b for b in BIKES if VEHICLE_WEIGHT_CLASS[b] == weight_class]
+                [k for k in ALL_KARTS if VEHICLE_WEIGHT_CLASS[k] == weight_class]
+                + [b for b in ALL_BIKES if VEHICLE_WEIGHT_CLASS[b] == weight_class]
             )
             rows_needed = -(-len(names) // VCOLS)  # ceil division
             grid_h = rows_needed * CELL_SIZE + (rows_needed - 1) * SPACING_CELL
@@ -1847,7 +1761,7 @@ class TrackerApp(App):
 
         for (track, cc), cell in self.tcells.items():
             done         = track_locs.get(f"{track}||{cc}", False)
-            cup          = _TRACK_TO_CUP.get(track, "")
+            cup          = _TRACK_NAME_TO_CUP.get(track, "")
             cup_unlocked = f"{cup} {cc}" in unlocked_cups
             cell.set_state(done=done, cup_unlocked=cup_unlocked)
 
