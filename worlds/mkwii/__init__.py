@@ -27,15 +27,15 @@ from BaseClasses import ItemClassification, Tutorial
 from worlds.AutoWorld import WebWorld, World
 
 from .items import (
-    MKWiiItem, ItemData, item_table, ALL_CUPS,
-    CUP_CC_ITEMS, MODE_ITEMS, CHARACTER_ITEMS, DEFAULT_CHARACTER_ITEMS,
-    KART_ITEMS, DEFAULT_KART_ITEMS, BIKE_ITEMS, DEFAULT_BIKE_ITEMS,
-    POWERUP_ITEMS, TRAP_ITEMS, FILLER_ITEMS, SPECIAL_ITEMS,
+    MKWiiItem, item_table, ALL_CUPS, MODE_ITEMS, 
+    CHARACTER_ITEMS, DEFAULT_CHARACTER_ITEMS, KART_ITEMS, 
+    DEFAULT_KART_ITEMS, BIKE_ITEMS, DEFAULT_BIKE_ITEMS,
+    POWERUP_ITEMS, TRAP_ITEMS, FILLER_ITEMS
 )
-from .locations import location_table, CUPS, DIFFICULTY_TIERS
+from .locations import location_table
 from .mkwii_info_lib import (
-    RACE_CHARACTERS, ALL_KARTS, ALL_BIKES, CHARACTER_WEIGHT_CLASS, VEHICLE_WEIGHT_CLASS,
-    WEIGHT_CLASSES, strip_suffix,
+    RACE_CHARACTERS, ALL_KARTS, ALL_BIKES, CHARACTER_WEIGHT_CLASS, 
+    VEHICLE_WEIGHT_CLASS, WEIGHT_CLASSES, META_ITEMS, strip_suffix
 )
 from .options import MKWiiOptions
 from .regions import create_regions
@@ -127,19 +127,23 @@ class MKWiiWorld(World):
         otherwise two random distinct classes are picked directly.
         """
         classes = self.random.sample(WEIGHT_CLASSES, 2)
+        meta_blocked = self.options.place_meta_late.value != 0
 
         starting_characters: typing.List[str] = []
         if self.options.lock_default_characters.value:
             for wc in classes:
-                candidates = [c for c in RACE_CHARACTERS if CHARACTER_WEIGHT_CLASS[c] == wc]
+                candidates = [c for c in RACE_CHARACTERS if CHARACTER_WEIGHT_CLASS[c] == wc
+                              and not (meta_blocked and c in META_ITEMS)]
                 starting_characters.append(self.random.choice(candidates))
 
         starting_kart = None
         starting_bike = None
         if self.options.lock_default_vehicles.value:
             kart_class, bike_class = classes[0], classes[1]
-            kart_candidates = [k for k in ALL_KARTS if VEHICLE_WEIGHT_CLASS[k] == kart_class]
-            bike_candidates = [b for b in ALL_BIKES if VEHICLE_WEIGHT_CLASS[b] == bike_class]
+            kart_candidates = [k for k in ALL_KARTS if VEHICLE_WEIGHT_CLASS[k] == kart_class
+                               and not (meta_blocked and k in META_ITEMS)]
+            bike_candidates = [b for b in ALL_BIKES if VEHICLE_WEIGHT_CLASS[b] == bike_class
+                               and not (meta_blocked and b in META_ITEMS)]
             starting_kart = self.random.choice(kart_candidates)
             starting_bike = self.random.choice(bike_candidates)
 
@@ -218,6 +222,9 @@ class MKWiiWorld(World):
                 if name == self.starting_bike:
                     continue
                 item_pool.append(self.create_item(name))
+
+        if self.options.place_meta_late.value == 3:
+            item_pool = [item for item in item_pool if item.name not in META_ITEMS]
 
         total_locations = len(self.multiworld.get_unfilled_locations(self.player))
         needed_items = total_locations - len(item_pool)
@@ -299,6 +306,7 @@ class MKWiiWorld(World):
             "include_race_checks": self.options.include_race_checks.value,
             "lock_default_characters": bool(self.options.lock_default_characters.value),
             "lock_default_vehicles": bool(self.options.lock_default_vehicles.value),
+            "place_meta_late": self.options.place_meta_late.value,
             "enable_item_randomization": bool(self.options.enable_item_randomization.value),
             "enable_traps": bool(self.options.enable_traps.value),
             "starting_items": list(self.options.starting_items.value),
