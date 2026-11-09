@@ -265,6 +265,8 @@ for _name in ALL_KARTS:
 for _name in ALL_BIKES:
     KIND_OF_NAME[_name] = "bike"
 
+# Characters and vehicles that make the game much easier.
+META_ITEMS = ["Funky Kong", "Daisy", "Bowser Bike", "Mach Bike"]
 
 # Vehicle names that differ between PAL and NTSC
 PAL_TO_NTSC_VEHICLE: Dict[str, str] = {
