@@ -53,6 +53,8 @@ from dme_helpers import (
 )
 from reporting import ReportHandler
 
+from worlds.mkwii.mkwii_info_lib import CHARACTER_ID_TO_NAME, CHARACTER_WEIGHT_CLASS, WEIGHT_CLASSES
+
 logger = logging.getLogger("MKWii.Memory")
 
 # Addresses, pointer chains and layout constants live in dme_addresses.py.
@@ -74,14 +76,6 @@ GP_CC_OFFSETS: Dict[str, int] = {
 # The menu scenario reads this until a character/vehicle has been picked.
 # See module docstring for the copy-into-race-scenario timing.
 UNSET_SELECTION = 0xFFFFFFFF
-
-# Cup ID to name mapping
-CUP_ID_TO_NAME: Dict[int, str] = {
-    0: "Mushroom Cup", 1: "Flower Cup", 2: "Star Cup", 3: "Special Cup",
-    4: "Shell Cup", 5: "Banana Cup", 6: "Leaf Cup", 7: "Lightning Cup",
-}
-
-CUP_NAME_TO_ID: Dict[str, int] = {v: k for k, v in CUP_ID_TO_NAME.items()}
 
 # First track ID for each cup (used when redirecting to an unlocked cup)
 CUP_FIRST_TRACK: Dict[int, int] = {
@@ -184,9 +178,6 @@ CUP_UNLOCK_IDS: Dict[str, Tuple[int, int]] = {
     "Lightning Cup Mirror": (0x0038, 5),
 }
 
-# Base cup item names (no save bits, blocked via RaceConfig)
-BASE_CUP_NAMES = {"Mushroom Cup", "Flower Cup", "Shell Cup", "Banana Cup"}
-
 MODE_IDS: Dict[str, Tuple[int, int]] = {
     "50cc Karts/Bikes":  (0x0038, 6),
     "100cc Karts/Bikes": (0x0038, 7),
@@ -200,95 +191,12 @@ ALL_UNLOCK_IDS.update({k: v for k, v in VEHICLE_IDS.items() if v is not None})
 ALL_UNLOCK_IDS.update(CUP_UNLOCK_IDS)
 ALL_UNLOCK_IDS.update(MODE_IDS)
 
-# Cup/GP tables
-CUP_TROPHY_IDS: Dict[str, int] = {
-    "Mushroom Cup": 0, "Flower Cup": 1, "Star Cup": 2, "Special Cup": 3,
-    "Shell Cup": 4, "Banana Cup": 5, "Leaf Cup": 6, "Lightning Cup": 7,
-}
-
-# PAL <-> US name aliases for vehicles
-_VEHICLE_ALIASES: Set[frozenset] = {
-    frozenset({"Turbo Blooper", "Super Blooper"}),
-    frozenset({"Royal Racer", "Daytripper"}),
-    frozenset({"Rally Romper", "Tiny Titan"}),
-    frozenset({"Magicruiser", "Magikruiser"}),
-    frozenset({"B. Dasher Mk 2", "B Dasher Mk 2", "Sprinter"}),
-    frozenset({"Dragonetti", "Honeycoupe"}),
-    frozenset({"Aero Glider", "Jetsetter"}),
-    frozenset({"Twinkle Star", "Shooting Star"}),
-    frozenset({"Rapide", "Zip Zip"}),
-    frozenset({"Nitrocycle", "Sneakster"}),
-    frozenset({"Bubble Bike", "Jet Bubble"}),
-    frozenset({"Torpedo", "Spear"}),
-    frozenset({"Baby Booster", "Booster Seat"}),
-    frozenset({"Nostalgia 1", "Classic Dragster"}),
-    frozenset({"Concerto", "Mini Beast"}),
-    frozenset({"Bowser Bike", "Flame Runner"}),
-    frozenset({"Nanobike", "Bit Bike"}),
-    frozenset({"Bon Bon", "Sugarscoot"}),
-}
-
-
-def get_vehicle_alternates(vehicle_name: str) -> Set[str]:
-    """Return all regional name variants for a vehicle."""
-    for group in _VEHICLE_ALIASES:
-        if vehicle_name in group:
-            return set(group)
-    return {vehicle_name}
-
-
-# Character/vehicle ID tables (for RaceConfig character/vehicle locking).
-# Keyed/valued by the same PAL names used throughout this file and in the
-# apworld's items.py, so no separate translation layer is needed elsewhere.
-
-CHARACTER_ID_TO_NAME: Dict[int, str] = {
-    0x00: "Mario", 0x01: "Baby Peach", 0x02: "Waluigi", 0x03: "Bowser",
-    0x04: "Baby Daisy", 0x05: "Dry Bones", 0x06: "Baby Mario", 0x07: "Luigi",
-    0x08: "Toad", 0x09: "Donkey Kong", 0x0A: "Yoshi", 0x0B: "Wario",
-    0x0C: "Baby Luigi", 0x0D: "Toadette", 0x0E: "Koopa Troopa", 0x0F: "Daisy",
-    0x10: "Peach", 0x11: "Birdo", 0x12: "Diddy Kong", 0x13: "King Boo",
-    0x14: "Bowser Jr.", 0x15: "Dry Bowser", 0x16: "Funky Kong", 0x17: "Rosalina",
-}
-CHARACTER_NAME_TO_ID: Dict[str, int] = {v: k for k, v in CHARACTER_ID_TO_NAME.items()}
-
-VEHICLE_ID_TO_NAME: Dict[int, str] = {
-    0x00: "Standard Kart S", 0x01: "Standard Kart M", 0x02: "Standard Kart L",
-    0x03: "Baby Booster", 0x04: "Nostalgia 1", 0x05: "Offroader",
-    0x06: "Concerto", 0x07: "Wild Wing", 0x08: "Flame Flyer",
-    0x09: "Cheep Charger", 0x0A: "Turbo Blooper", 0x0B: "Piranha Prowler",
-    0x0C: "Rally Romper", 0x0D: "Royal Racer", 0x0E: "Aero Glider",
-    0x0F: "Blue Falcon", 0x10: "B. Dasher Mk 2", 0x11: "Dragonetti",
-    0x12: "Standard Bike S", 0x13: "Standard Bike M", 0x14: "Standard Bike L",
-    0x15: "Bullet Bike", 0x16: "Mach Bike", 0x17: "Bowser Bike",
-    0x18: "Nanobike", 0x19: "Bon Bon", 0x1A: "Wario Bike",
-    0x1B: "Quacker", 0x1C: "Rapide", 0x1D: "Twinkle Star",
-    0x1E: "Magicruiser", 0x1F: "Nitrocycle", 0x20: "Torpedo",
-    0x21: "Bubble Bike", 0x22: "Dolphin Dasher", 0x23: "Phantom",
-}
-
-# Includes every PAL/US alias for each vehicle, so a name pulled from either
-# unlocked_karts or unlocked_bikes (which store all alias forms) resolves.
-VEHICLE_NAME_TO_ID: Dict[str, int] = {}
-for _vid, _vname in VEHICLE_ID_TO_NAME.items():
-    for _alt in get_vehicle_alternates(_vname):
-        VEHICLE_NAME_TO_ID[_alt] = _vid
-
-# 0 small, 1 medium, 2 large, indexed by character ID (0-23). Derived from
-# Vega's "Random Character+Vehicle For Every Race" Gecko code lookup table
-# and cross-checked live in-game against Peach (0x10, medium) and
-# Funky Kong (0x16, large).
-_CHARACTER_CLASS_BY_ID = [
-    1, 0, 2, 2, 0, 0, 0, 1, 0, 2, 1, 2, 0, 0, 0, 1, 1, 1, 1, 2, 1, 2, 2, 2,
-]
-_WEIGHT_CLASS_NAMES = ["Small", "Medium", "Large"]
-
 
 def character_weight_class(character_id: int) -> Optional[str]:
     """Return "Small"/"Medium"/"Large" for a character ID, or None if out
     of range (e.g. a Mii ID, which has no fixed weight class)."""
-    if 0 <= character_id < len(_CHARACTER_CLASS_BY_ID):
-        return _WEIGHT_CLASS_NAMES[_CHARACTER_CLASS_BY_ID[character_id]]
-    return None
+    name = CHARACTER_ID_TO_NAME.get(character_id)
+    return CHARACTER_WEIGHT_CLASS.get(name)
 
 
 def vehicle_weight_class(vehicle_id: int) -> Optional[str]:
@@ -296,7 +204,7 @@ def vehicle_weight_class(vehicle_id: int) -> Optional[str]:
     three consecutive vehicle IDs cycles Small/Medium/Large, for both karts
     (0x00-0x11) and bikes (0x12-0x23), so this is id % 3."""
     if 0 <= vehicle_id <= 0x23:
-        return _WEIGHT_CLASS_NAMES[vehicle_id % 3]
+        return WEIGHT_CLASSES[vehicle_id % 3]
     return None
 
 

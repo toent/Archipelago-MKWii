@@ -16,6 +16,13 @@ import sys
 import asyncio
 import threading
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from mkwii_info_lib import (
+    CCS, TRACKS, TRACK_NAME_TO_CUP, ALL_CHARACTERS, VEHICLE_WEIGHT_CLASS, ALL_KARTS,
+    ALL_BIKES, WEIGHT_CLASSES, POWERUP_ITEMS, KIND_OF_NAME, is_unlock, strip_suffix
+)
 
 import certifi
 
@@ -214,65 +221,27 @@ def _slice_cup_icons() -> None:
 
 _slice_cup_icons()
 
-CCS  = ["50cc", "100cc", "150cc", "Mirror"]
-
-TRACKS = {
-    "Mushroom Cup":  ["Luigi Circuit", "Moo Moo Meadows", "Mushroom Gorge", "Toad's Factory"],
-    "Flower Cup":    ["Mario Circuit", "Coconut Mall", "DK Summit", "Wario's Gold Mine"],
-    "Star Cup":      ["Daisy Circuit", "Koopa Cape", "Maple Treeway", "Grumble Volcano"],
-    "Special Cup":   ["Dry Dry Ruins", "Moonview Highway", "Bowser's Castle", "Rainbow Road"],
-    "Shell Cup":     ["GCN Peach Beach", "DS Yoshi Falls", "SNES Ghost Valley 2", "N64 Mario Raceway"],
-    "Banana Cup":    ["N64 Sherbet Land", "GBA Shy Guy Beach", "DS Delfino Square", "GCN Waluigi Stadium"],
-    "Leaf Cup":      ["DS Desert Hills", "GBA Bowser's Castle 3", "N64 DK's Jungle Parkway", "GCN Mario Circuit"],
-    "Lightning Cup": ["SNES Mario Circuit 3", "DS Peach Gardens", "GCN DK Mountain", "N64 Bowser's Castle"],
-}
-
-_TRACK_TO_CUP: dict[str, str] = {
-    track: cup for cup, tracks in TRACKS.items() for track in tracks
-}
-
-POWERUP_ITEMS = [
-    "Powerup: Red Shell",
-    "Powerup: Triple Bananas",
-    "Powerup: Triple Green Shells",
-    "Powerup: Triple Red Shells",
-    "Powerup: Bob-omb",
-    "Powerup: Blue Shell",
-    "Powerup: Fake Item Box",
-    "Powerup: Star",
-    "Powerup: Golden Mushroom",
-    "Powerup: Mega Mushroom",
-    "Powerup: Blooper",
-    "Powerup: POW Block",
-    "Powerup: Lightning",
-    "Powerup: Triple Mushrooms",
-    "Powerup: Bullet Bill",
-    "Powerup: Mushroom",
-    "Powerup: Green Shell",
-    "Powerup: Banana",
-]
-
 _ITEM_SPRITESHEET = _HERE / "img" / "item_icons.png"
 _ITEM_GRID_COLS = 9
 _ITEM_GRID_POS = {
-    "Powerup: Blooper":              (0, 0),
-    "Powerup: Mega Mushroom":        (1, 0),
-    "Powerup: POW Block":            (2, 0),
-    "Powerup: Triple Bananas":       (3, 0),
-    "Powerup: Banana":               (4, 0),
-    "Powerup: Bob-omb":              (5, 0),
-    "Powerup: Fake Item Box":        (6, 0),
-    "Powerup: Golden Mushroom":      (7, 0),
-    "Powerup: Lightning":            (8, 0),
-    "Powerup: Star":                 (0, 1),
-    "Powerup: Green Shell":          (1, 1),
-    "Powerup: Triple Green Shells":  (2, 1),
-    "Powerup: Red Shell":            (3, 1),
-    "Powerup: Triple Red Shells":    (4, 1),
-    "Powerup: Blue Shell":           (5, 1),
-    "Powerup: Bullet Bill":          (6, 1),
-    "Powerup: Mushroom":             (7, 1),
-    "Powerup: Triple Mushrooms":     (8, 1),
+    "Blooper (Unlock)":              (0, 0),
+    "Mega Mushroom (Unlock)":        (1, 0),
+    "POW Block (Unlock)":            (2, 0),
+    "Triple Bananas (Unlock)":       (3, 0),
+    "Banana (Unlock)":               (4, 0),
+    "Bob-omb (Unlock)":              (5, 0),
+    "Fake Item Box (Unlock)":        (6, 0),
+    "Golden Mushroom (Unlock)":      (7, 0),
+    "Lightning (Unlock)":            (8, 0),
+    "Star (Unlock)":                 (0, 1),
+    "Green Shell (Unlock)":          (1, 1),
+    "Triple Green Shells (Unlock)":  (2, 1),
+    "Red Shell (Unlock)":            (3, 1),
+    "Triple Red Shells (Unlock)":    (4, 1),
+    "Blue Shell (Unlock)":           (5, 1),
+    "Bullet Bill (Unlock)":          (6, 1),
+    "Mushroom (Unlock)":             (7, 1),
+    "Triple Mushrooms (Unlock)":     (8, 1),
 }
 
 ITEM_ICON_PATHS: dict[str, str] = {}
@@ -312,7 +281,7 @@ def _slice_item_icons() -> None:
             ch_off = (canvas_h - crop.shape[0]) // 2
             cw_off = (canvas_w - crop.shape[1]) // 2
             canvas[ch_off:ch_off+crop.shape[0], cw_off:cw_off+crop.shape[1]] = crop
-            fname = item.lower().replace("powerup: ", "").replace(" ", "_").replace("-", "") + ".png"
+            fname = strip_suffix(item).lower().replace(" ", "_").replace("-", "") + ".png"
             out = tmp_dir / fname
             PilImage.fromarray(canvas, "RGBA").save(str(out))
             ITEM_ICON_PATHS[item] = str(out)
@@ -321,55 +290,6 @@ def _slice_item_icons() -> None:
 
 
 _slice_item_icons()
-
-# Characters and vehicles. Names match the AP item names in worlds.mkwii.items
-# exactly (e.g. "Character: Mario" -> "Mario"), so no translation is needed
-# between item names and display names. Weight class here is the in-game
-# kart-compatibility class (small/medium/large), same table as
-# worlds.mkwii.items.CHARACTER_WEIGHT_CLASS / VEHICLE_WEIGHT_CLASS, not the
-# grouping used by the character_icons.png sprite sheet's own labels.
-CHARACTER_WEIGHT_CLASS: dict[str, str] = {
-    "Mario": "Medium", "Baby Peach": "Small", "Waluigi": "Large", "Bowser": "Large",
-    "Baby Daisy": "Small", "Dry Bones": "Small", "Baby Mario": "Small", "Luigi": "Medium",
-    "Toad": "Small", "Donkey Kong": "Large", "Yoshi": "Medium", "Wario": "Large",
-    "Baby Luigi": "Small", "Toadette": "Small", "Koopa Troopa": "Small", "Daisy": "Medium",
-    "Peach": "Medium", "Birdo": "Medium", "Diddy Kong": "Medium", "King Boo": "Large",
-    "Bowser Jr.": "Medium", "Dry Bowser": "Large", "Funky Kong": "Large", "Rosalina": "Large",
-}
-# Mii has no fixed weight class in-game, shown but not grouped by class.
-CHARACTERS = list(CHARACTER_WEIGHT_CLASS.keys()) + ["Mii Outfit A", "Mii Outfit B"]
-
-VEHICLE_WEIGHT_CLASS: dict[str, str] = {
-    "Standard Kart S": "Small", "Standard Kart M": "Medium", "Standard Kart L": "Large",
-    "Baby Booster": "Small", "Nostalgia 1": "Medium", "Offroader": "Large",
-    "Concerto": "Small", "Wild Wing": "Medium", "Flame Flyer": "Large",
-    "Cheep Charger": "Small", "Turbo Blooper": "Medium", "Piranha Prowler": "Large",
-    "Rally Romper": "Small", "Royal Racer": "Medium", "Aero Glider": "Large",
-    "Blue Falcon": "Small", "B. Dasher Mk 2": "Medium", "Dragonetti": "Large",
-    "Standard Bike S": "Small", "Standard Bike M": "Medium", "Standard Bike L": "Large",
-    "Bullet Bike": "Small", "Mach Bike": "Medium", "Bowser Bike": "Large",
-    "Nanobike": "Small", "Bon Bon": "Medium", "Wario Bike": "Large",
-    "Quacker": "Small", "Rapide": "Medium", "Twinkle Star": "Large",
-    "Magicruiser": "Small", "Nitrocycle": "Medium", "Torpedo": "Large",
-    "Bubble Bike": "Small", "Dolphin Dasher": "Medium", "Phantom": "Large",
-}
-KARTS = [
-    "Standard Kart S", "Standard Kart M", "Standard Kart L",
-    "Baby Booster", "Nostalgia 1", "Offroader",
-    "Concerto", "Wild Wing", "Flame Flyer",
-    "Cheep Charger", "Turbo Blooper", "Piranha Prowler",
-    "Rally Romper", "Royal Racer", "Aero Glider",
-    "Blue Falcon", "B. Dasher Mk 2", "Dragonetti",
-]
-BIKES = [
-    "Standard Bike S", "Standard Bike M", "Standard Bike L",
-    "Bullet Bike", "Mach Bike", "Bowser Bike",
-    "Nanobike", "Bon Bon", "Wario Bike",
-    "Quacker", "Rapide", "Twinkle Star",
-    "Magicruiser", "Nitrocycle", "Torpedo",
-    "Bubble Bike", "Dolphin Dasher", "Phantom",
-]
-WEIGHT_CLASSES = ["Small", "Medium", "Large"]
 
 _CHARACTER_SPRITESHEET = _HERE / "img" / "character_icons.png"
 
@@ -684,24 +604,24 @@ async def _ap_client_loop() -> None:
                 trophies_required = int(slot_data.get("cups_required_for_goal", 6))
                 cup_rules    = _cup_rules_from_slot_data(slot_data)
                 _GAME_TO_AP = {v: k for k, v in {
-                    "Powerup: Red Shell":           "Red Shell",
-                    "Powerup: Triple Bananas":      "Triple Bananas",
-                    "Powerup: Triple Green Shells": "Triple Green Shells",
-                    "Powerup: Triple Red Shells":   "Triple Red Shells",
-                    "Powerup: Bob-omb":             "Bob-omb",
-                    "Powerup: Blue Shell":          "Spiny Shell",
-                    "Powerup: Fake Item Box":       "Fake Item Box",
-                    "Powerup: Star":                "Star",
-                    "Powerup: Golden Mushroom":     "Golden Mushroom",
-                    "Powerup: Mega Mushroom":       "Mega Mushroom",
-                    "Powerup: Blooper":             "Blooper",
-                    "Powerup: POW Block":           "POW Block",
-                    "Powerup: Lightning":           "Lightning",
-                    "Powerup: Triple Mushrooms":    "Triple Mushrooms",
-                    "Powerup: Bullet Bill":         "Bullet Bill",
-                    "Powerup: Mushroom":            "Mushroom",
-                    "Powerup: Green Shell":         "Green Shell",
-                    "Powerup: Banana":              "Banana",
+                    "Red Shell (Unlock)":           "Red Shell",
+                    "Triple Bananas (Unlock)":      "Triple Bananas",
+                    "Triple Green Shells (Unlock)": "Triple Green Shells",
+                    "Triple Red Shells (Unlock)":   "Triple Red Shells",
+                    "Bob-omb (Unlock)":             "Bob-omb",
+                    "Blue Shell (Unlock)":          "Spiny Shell",
+                    "Fake Item Box (Unlock)":       "Fake Item Box",
+                    "Star (Unlock)":                "Star",
+                    "Golden Mushroom (Unlock)":     "Golden Mushroom",
+                    "Mega Mushroom (Unlock)":       "Mega Mushroom",
+                    "Blooper (Unlock)":             "Blooper",
+                    "POW Block (Unlock)":           "POW Block",
+                    "Lightning (Unlock)":           "Lightning",
+                    "Triple Mushrooms (Unlock)":    "Triple Mushrooms",
+                    "Bullet Bill (Unlock)":         "Bullet Bill",
+                    "Mushroom (Unlock)":            "Mushroom",
+                    "Green Shell (Unlock)":         "Green Shell",
+                    "Banana (Unlock)":              "Banana",
                 }.items()}
                 starting_items_raw = slot_data.get("starting_items") or []
                 starting_unlocked: list[str] = []
@@ -780,17 +700,18 @@ async def _ap_client_loop() -> None:
                                 continue
                             if iname == "Victory Trophy":
                                 victory_trophies += 1
-                            if iname.startswith("Powerup:") and iname not in unlocked_items:
+                            if is_unlock(iname) and iname not in unlocked_items:
                                 unlocked_items.append(iname)
                             # Cup unlock items: "{Cup Name} {cc}" e.g. "Mushroom Cup 50cc"
                             if "Cup" in iname and ("cc" in iname.lower() or "mirror" in iname.lower()):
                                 unlocked_cups.add(iname)
-                            if iname.startswith("Character: "):
-                                unlocked_characters.add(iname[len("Character: "):])
-                            elif iname.startswith("Kart: "):
-                                unlocked_karts.add(iname[len("Kart: "):])
-                            elif iname.startswith("Bike: "):
-                                unlocked_bikes.add(iname[len("Bike: "):])
+                            kind = KIND_OF_NAME.get(iname)
+                            if kind == "character":
+                                unlocked_characters.add(iname)
+                            elif kind == "kart":
+                                unlocked_karts.add(iname)
+                            elif kind == "bike":
+                                unlocked_bikes.add(iname)
 
                 _update_state(
                     connected=True,
@@ -829,27 +750,25 @@ async def _ap_client_loop() -> None:
                                 if iname == "Victory Trophy":
                                     victory_trophies += 1
                                     changed = True
-                                if iname.startswith("Powerup:") and iname not in unlocked_items:
+                                if is_unlock(iname) and iname not in unlocked_items:
                                     unlocked_items.append(iname)
                                     changed = True
                                 if "Cup" in iname and ("cc" in iname.lower() or "mirror" in iname.lower()):
                                     if iname not in unlocked_cups:
                                         unlocked_cups.add(iname)
                                         changed = True
-                                if iname.startswith("Character: "):
-                                    name = iname[len("Character: "):]
-                                    if name not in unlocked_characters:
-                                        unlocked_characters.add(name)
+                                kind = KIND_OF_NAME.get(iname)
+                                if kind == "character":
+                                    if iname not in unlocked_characters:
+                                        unlocked_characters.add(iname)
                                         changed = True
-                                elif iname.startswith("Kart: "):
-                                    name = iname[len("Kart: "):]
-                                    if name not in unlocked_karts:
-                                        unlocked_karts.add(name)
+                                elif kind == "kart":
+                                    if iname not in unlocked_karts:
+                                        unlocked_karts.add(iname)
                                         changed = True
-                                elif iname.startswith("Bike: "):
-                                    name = iname[len("Bike: "):]
-                                    if name not in unlocked_bikes:
-                                        unlocked_bikes.add(name)
+                                elif kind == "bike":
+                                    if iname not in unlocked_bikes:
+                                        unlocked_bikes.add(iname)
                                         changed = True
 
                         elif cmd == "RoomUpdate":
@@ -1126,7 +1045,7 @@ class ItemCell:
 
     def __init__(self, name: str):
         self._name  = name
-        self._short = name.replace("Powerup: ", "")
+        self._short = strip_suffix(name)
         # size_hint=(1,1) so GridLayout sizes the cell; canvas callbacks keep bg/border correct
         self.widget = FloatLayout(size_hint=(1, 1))
         with self.widget.canvas.before:
@@ -1702,7 +1621,7 @@ class TrackerApp(App):
         grid = GridLayout(cols=COLS, spacing=SPACING, padding=0,
                           size_hint=(1, 1))
 
-        for name in CHARACTERS:
+        for name in ALL_CHARACTERS:
             cell = CharacterCell(name)
             self.ccells[name] = cell
             grid.add_widget(cell.widget)
@@ -1738,8 +1657,8 @@ class TrackerApp(App):
             outer.add_widget(hdr)
 
             names = (
-                [k for k in KARTS if VEHICLE_WEIGHT_CLASS[k] == weight_class]
-                + [b for b in BIKES if VEHICLE_WEIGHT_CLASS[b] == weight_class]
+                [k for k in ALL_KARTS if VEHICLE_WEIGHT_CLASS[k] == weight_class]
+                + [b for b in ALL_BIKES if VEHICLE_WEIGHT_CLASS[b] == weight_class]
             )
             rows_needed = -(-len(names) // VCOLS)  # ceil division
             grid_h = rows_needed * CELL_SIZE + (rows_needed - 1) * SPACING_CELL
@@ -1847,7 +1766,7 @@ class TrackerApp(App):
 
         for (track, cc), cell in self.tcells.items():
             done         = track_locs.get(f"{track}||{cc}", False)
-            cup          = _TRACK_TO_CUP.get(track, "")
+            cup          = TRACK_NAME_TO_CUP.get(track, "")
             cup_unlocked = f"{cup} {cc}" in unlocked_cups
             cell.set_state(done=done, cup_unlocked=cup_unlocked)
 

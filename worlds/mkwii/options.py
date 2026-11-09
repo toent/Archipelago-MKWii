@@ -87,6 +87,15 @@ class LockDefaultVehicles(Toggle):
     display_name = "Lock Default Vehicles"
     default = 1
 
+class PlaceMetaLate(Choice):
+    """Do we place meta characters and vehicles (Funky Kong, Daisy, Bowser Bike, Mach Bike) 
+    either anywhere, not as starting characters/vehicles, outside of sphere 1, or not at all?"""
+    display_name = "Place Meta Characters/Vehicles"
+    option_anywhere = 0
+    option_not_starting = 1
+    option_outside_sphere_1 = 2
+    option_never = 3
+    default = 2  # outside of sphere 1    
 
 class EnableItemRandomization(Toggle):
     """Enable mid-race item randomization. When enabled, items from item boxes
@@ -320,6 +329,7 @@ class MKWiiOptions(PerGameCommonOptions):
     goal_cc: GoalCC
     lock_default_characters: LockDefaultCharacters
     lock_default_vehicles: LockDefaultVehicles
+    place_meta_late: PlaceMetaLate
     enable_item_randomization: EnableItemRandomization
     starting_items: StartingItems
     random_item_mode: RandomItemMode

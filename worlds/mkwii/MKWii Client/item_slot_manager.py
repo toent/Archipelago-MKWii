@@ -29,34 +29,11 @@ from pathlib import Path
 from random import choices, choice
 from typing import Callable, Deque, Dict, List, Optional, Set, Tuple
 
+from worlds.mkwii.mkwii_info_lib import ITEM_ID, EMPTY_ITEM_ID, TRACK_ID_TO_NAME, CC_BYTE_TO_NAME, AP_TO_ITEM, is_unlock
 from dme_helpers import U8, U32, base_address, is_valid_ptr, read_named, read_u8, write_named
 from reporting import ReportHandler
 
 logger = logging.getLogger("MKWii.ItemSlot")
-
-# In game item IDs
-ITEM_ID: Dict[str, int] = {
-    "Green Shell":        0x00,
-    "Red Shell":          0x01,
-    "Banana":             0x02,
-    "Fake Item Box":      0x03,
-    "Mushroom":           0x04,
-    "Triple Mushrooms":   0x05,
-    "Bob-omb":            0x06,
-    "Blue Shell":         0x07,
-    "Lightning":          0x08,
-    "Star":               0x09,
-    "Golden Mushroom":    0x0A,
-    "Mega Mushroom":      0x0B,
-    "Blooper":            0x0C,
-    "POW Block":          0x0D,
-    "Thunder Cloud":      0x0E,
-    "Bullet Bill":        0x0F,
-    "Triple Green Shells":0x10,
-    "Triple Red Shells":  0x11,
-    "Triple Bananas":     0x12,
-}
-EMPTY_ID = 0x14
 
 # Items that require count > 1
 _ITEM_COUNT_MAP: Dict[int, int] = {
@@ -64,50 +41,6 @@ _ITEM_COUNT_MAP: Dict[int, int] = {
     0x10: 3,  # Triple Green Shells
     0x11: 3,  # Triple Red Shells
     0x12: 3,  # Triple Bananas
-}
-
-# Track ID - location-table track name
-TRACK_ID_TO_NAME: Dict[int, str] = {
-    0x08: "Luigi Circuit",
-    0x01: "Moo Moo Meadows",
-    0x02: "Mushroom Gorge",
-    0x04: "Toad's Factory",
-    0x00: "Mario Circuit",
-    0x05: "Coconut Mall",
-    0x06: "DK Summit",
-    0x07: "Wario's Gold Mine",
-    0x09: "Daisy Circuit",
-    0x0F: "Koopa Cape",
-    0x0B: "Maple Treeway",
-    0x03: "Grumble Volcano",
-    0x0E: "Dry Dry Ruins",
-    0x0A: "Moonview Highway",
-    0x0C: "Bowser's Castle",
-    0x0D: "Rainbow Road",
-
-    0x10: "GCN Peach Beach",
-    0x14: "DS Yoshi Falls",
-    0x19: "SNES Ghost Valley 2",
-    0x1A: "N64 Mario Raceway",
-    0x1B: "N64 Sherbet Land",
-    0x1F: "GBA Shy Guy Beach",
-    0x17: "DS Delfino Square",
-    0x12: "GCN Waluigi Stadium",
-    0x15: "DS Desert Hills",
-    0x1E: "GBA Bowser's Castle 3",
-    0x1D: "N64 DK's Jungle Parkway",
-    0x11: "GCN Mario Circuit",
-    0x18: "SNES Mario Circuit 3",
-    0x16: "DS Peach Gardens",
-    0x13: "GCN DK Mountain",
-    0x1C: "N64 Bowser's Castle",
-}
-
-# CC byte value > location-table CC string
-CC_BYTE_TO_NAME: Dict[int, str] = {
-    0: "50cc",
-    1: "100cc",
-    2: "150cc",
 }
 
 # GP item probability table
@@ -133,43 +66,6 @@ GP_PROBS: Dict[str, List[int]] = {
     "Triple Bananas":     [25, 25, 15,  5,  0,  0,  0,  0,  0,  0,  0,  0],
 }
 
-# AP item name in-game item name
-AP_TO_GAME: Dict[str, str] = {
-    # Powerup unlocks
-    "Powerup: Red Shell":           "Red Shell",
-    "Powerup: Triple Bananas":      "Triple Bananas",
-    "Powerup: Triple Green Shells": "Triple Green Shells",
-    "Powerup: Triple Red Shells":   "Triple Red Shells",
-    "Powerup: Bob-omb":             "Bob-omb",
-    "Powerup: Blue Shell":          "Blue Shell",
-    "Powerup: Fake Item Box":       "Fake Item Box",
-    "Powerup: Star":                "Star",
-    "Powerup: Golden Mushroom":     "Golden Mushroom",
-    "Powerup: Mega Mushroom":       "Mega Mushroom",
-    "Powerup: Blooper":             "Blooper",
-    "Powerup: POW Block":           "POW Block",
-    "Powerup: Lightning":           "Lightning",
-    "Powerup: Triple Mushrooms":    "Triple Mushrooms",
-    "Powerup: Bullet Bill":         "Bullet Bill",
-    "Powerup: Mushroom":          "Mushroom",
-    "Powerup: Green Shell":       "Green Shell",
-    "Powerup: Banana":            "Banana",
-    # Filler items with explicit item targets
-    "Filler: Mushroom":             "Mushroom",
-    "Filler: Triple Mushroom":      "Triple Mushrooms",
-    "Filler: Golden Mushroom":      "Golden Mushroom",
-    "Filler: Star":                 "Star",
-    "Filler: Bullet Bill":          "Bullet Bill",
-    "Filler: Mega Mushroom":        "Mega Mushroom",
-    "Filler: Blue Shell":           "Blue Shell",
-    "Filler: Red Shell":            "Red Shell",
-    "Filler: Triple Red Shell":     "Triple Red Shells",
-    "Filler: Bob-omb":              "Bob-omb",
-    "Filler: Lightning":            "Lightning",
-    "Filler: Blooper":              "Blooper",
-    "Filler: POW Block":            "POW Block",
-}
-
 # Traps that have a direct in-game item equivalent (overwrites item slot immediately)
 TRAP_TO_GAME: Dict[str, str] = {
     "Cloud Trap":     "Thunder Cloud",
@@ -178,7 +74,7 @@ TRAP_TO_GAME: Dict[str, str] = {
 # Traps held for future memory-effect implementation (no current in-game action)
 FUTURE_EFFECT_TRAPS: Set[str] = {"Brake Trap", "Gas Trap", "Boost Trap","POW Trap","Lightning Trap"}
 
-# Internal sentinel for "Filler: Random Item"
+# Internal sentinel for "Random Item (Filler)"
 _RANDOM_TOKEN = "__random__"
 
 
@@ -207,7 +103,7 @@ class RaceStateReader:
         actual_item      = read_named("ITEM_ID", U32)
         if roulette_display is None or actual_item is None:
             return False
-        return roulette_display != EMPTY_ID and actual_item == EMPTY_ID
+        return roulette_display != EMPTY_ITEM_ID and actual_item == EMPTY_ITEM_ID
 
     def read_cc_name(self) -> Optional[str]:
         mirror = read_named("RACECONFIG_MIRROR", U8)
@@ -328,21 +224,21 @@ class ItemSlotManager:
                 msg=f"[ItemSlot] Future trap queued (no current effect): {ap_item_name}"
             )
 
-        elif ap_item_name == "Filler: Random Item":
+        elif ap_item_name == "Random Item (Filler)":
             self._filler_queue.append(_RANDOM_TOKEN)
             self.reporter.report(
                 type="INFO",
-                msg="[ItemSlot] Filler: Random Item queued (resolves at give-time)"
+                msg="[ItemSlot] 'Random Item (Filler)' queued (resolves at give-time)"
             )
 
         else:
-            game_name = AP_TO_GAME.get(ap_item_name)
+            game_name = AP_TO_ITEM.get(ap_item_name)
             if game_name:
-                if ap_item_name.startswith("Powerup:"):
+                if is_unlock(ap_item_name):
                     self._targeted_queue.append(game_name)
                     self.reporter.report(
                         type="INFO",
-                        msg=f"[ItemSlot] Targeted powerup queued: {ap_item_name} -> {game_name}"
+                        msg=f"[ItemSlot] Targeted item unlock queued: {ap_item_name} -> {game_name}"
                     )
                 else:
                     self._filler_queue.append(game_name)
@@ -451,7 +347,7 @@ class ItemSlotManager:
         return True
 
     def _clear_slot(self) -> None:
-        write_named("ITEM_ID", U32, EMPTY_ID)
+        write_named("ITEM_ID", U32, EMPTY_ITEM_ID)
         write_named("ITEM_COUNT", U32, 0)
     
     # Race lifecycle
@@ -529,7 +425,7 @@ class ItemSlotManager:
             return
         self._prev_roulette_active = False
 
-        is_empty = (item_id == EMPTY_ID or count == 0)
+        is_empty = (item_id == EMPTY_ITEM_ID or count == 0)
         prev_was_empty = self.item_slot_was_empty
 
         if is_empty and not prev_was_empty:

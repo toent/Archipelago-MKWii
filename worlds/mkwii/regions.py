@@ -8,9 +8,9 @@ from BaseClasses import Region, Entrance
 if typing.TYPE_CHECKING:
     from . import MKWiiWorld
 
-from .locations import MKWiiLocation, location_table, CUPS, TRACKS
+from .locations import MKWiiLocation, location_table
+from .mkwii_info_lib import CCS, CUPS, TRACKS
 
-_CC_INDEX = ["50cc", "100cc", "150cc", "Mirror"]
 _DIFFICULTY_INDEX = ["3rd_place", "2nd_place", "1st_place", "1_star", "2_star", "3_star"]
 
 
@@ -23,7 +23,7 @@ def create_regions(world: "MKWiiWorld") -> None:
     enabled_tiers = world.options.enabled_cup_check_tiers.value
     include_races = world.options.include_race_checks.value
 
-    goal_cc_str = _CC_INDEX[world.options.goal_cc.value]
+    goal_cc_str = CCS[world.options.goal_cc.value]
     goal_difficulty_str = _DIFFICULTY_INDEX[world.options.goal_difficulty.value]
 
     menu = Region("Menu", player, multiworld)

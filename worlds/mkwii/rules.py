@@ -8,14 +8,16 @@ and have no access rule for their assigned CC.
 import typing
 
 from BaseClasses import CollectionState
+from worlds.generic.Rules import add_item_rule
+
+from .locations import location_table
 
 if typing.TYPE_CHECKING:
     from . import MKWiiWorld
 
-from .locations import CUPS
+from .mkwii_info_lib import CUPS, META_ITEMS
 
 
-CC_INDEX = ["50cc", "100cc", "150cc", "Mirror"]
 DIFFICULTY_INDEX = ["3rd_place", "2nd_place", "1st_place", "1_star", "2_star", "3_star"]
 
 
@@ -68,5 +70,15 @@ def set_rules(world: "MKWiiWorld") -> None:
     for entrance in menu.exits:
         if entrance.name == "To Victory":
             entrance.access_rule = victory_rule
+
+    # Keep meta items out of the starting cup locations (sphere 1)
+    if world.options.place_meta_late.value == 2:
+        for location in multiworld.get_locations(player):
+            data = location_table.get(location.name)
+            if data is None:
+                continue
+            if starting_cups.get(data.cup) != data.cc:
+                continue
+            add_item_rule(location, lambda item: not (item.player == player and item.name in META_ITEMS))
 
     multiworld.completion_condition[player] = lambda state: state.has("Victory", player)

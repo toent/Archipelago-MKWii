@@ -27,18 +27,19 @@ from BaseClasses import ItemClassification, Tutorial
 from worlds.AutoWorld import WebWorld, World
 
 from .items import (
-    MKWiiItem, ItemData, item_table, ALL_CUPS, ALL_CHARACTERS, ALL_KARTS, ALL_BIKES,
-    CHARACTER_WEIGHT_CLASS, VEHICLE_WEIGHT_CLASS,
-    CUP_CC_ITEMS, MODE_ITEMS, CHARACTER_ITEMS, DEFAULT_CHARACTER_ITEMS,
-    KART_ITEMS, DEFAULT_KART_ITEMS, BIKE_ITEMS, DEFAULT_BIKE_ITEMS,
-    POWERUP_ITEMS, TRAP_ITEMS, FILLER_ITEMS, SPECIAL_ITEMS,
+    MKWiiItem, item_table, ALL_CUPS, MODE_ITEMS, 
+    CHARACTER_ITEMS, DEFAULT_CHARACTER_ITEMS, KART_ITEMS, 
+    DEFAULT_KART_ITEMS, BIKE_ITEMS, DEFAULT_BIKE_ITEMS,
+    POWERUP_ITEMS, TRAP_ITEMS, FILLER_ITEMS
 )
-from .locations import location_table, CUPS, DIFFICULTY_TIERS
+from .locations import location_table
+from .mkwii_info_lib import (
+    RACE_CHARACTERS, ALL_KARTS, ALL_BIKES, CHARACTER_WEIGHT_CLASS, 
+    VEHICLE_WEIGHT_CLASS, WEIGHT_CLASSES, META_ITEMS, strip_suffix
+)
 from .options import MKWiiOptions
 from .regions import create_regions
 from .rules import set_rules
-
-WEIGHT_CLASSES = ["Small", "Medium", "Large"]
 
 
 class MKWiiWeb(WebWorld):
@@ -126,19 +127,23 @@ class MKWiiWorld(World):
         otherwise two random distinct classes are picked directly.
         """
         classes = self.random.sample(WEIGHT_CLASSES, 2)
+        meta_blocked = self.options.place_meta_late.value != 0
 
         starting_characters: typing.List[str] = []
         if self.options.lock_default_characters.value:
             for wc in classes:
-                candidates = [c for c in ALL_CHARACTERS if CHARACTER_WEIGHT_CLASS[c] == wc]
+                candidates = [c for c in RACE_CHARACTERS if CHARACTER_WEIGHT_CLASS[c] == wc
+                              and not (meta_blocked and c in META_ITEMS)]
                 starting_characters.append(self.random.choice(candidates))
 
         starting_kart = None
         starting_bike = None
         if self.options.lock_default_vehicles.value:
             kart_class, bike_class = classes[0], classes[1]
-            kart_candidates = [k for k in ALL_KARTS if VEHICLE_WEIGHT_CLASS[k] == kart_class]
-            bike_candidates = [b for b in ALL_BIKES if VEHICLE_WEIGHT_CLASS[b] == bike_class]
+            kart_candidates = [k for k in ALL_KARTS if VEHICLE_WEIGHT_CLASS[k] == kart_class
+                               and not (meta_blocked and k in META_ITEMS)]
+            bike_candidates = [b for b in ALL_BIKES if VEHICLE_WEIGHT_CLASS[b] == bike_class
+                               and not (meta_blocked and b in META_ITEMS)]
             starting_kart = self.random.choice(kart_candidates)
             starting_bike = self.random.choice(bike_candidates)
 
@@ -183,8 +188,7 @@ class MKWiiWorld(World):
         # Characters with save bits: always in the pool, minus whichever
         # were picked as starting characters (the pick can land on either tier)
         for name in CHARACTER_ITEMS:
-            char = name.split(": ", 1)[1]
-            if char in self.starting_characters:
+            if name in self.starting_characters:
                 continue
             item_pool.append(self.create_item(name))
 
@@ -192,21 +196,18 @@ class MKWiiWorld(World):
         # whichever were picked as starting characters
         if self.options.lock_default_characters.value:
             for name in DEFAULT_CHARACTER_ITEMS:
-                char = name.split(": ", 1)[1]
-                if char in self.starting_characters:
+                if name in self.starting_characters:
                     continue
                 item_pool.append(self.create_item(name))
 
         # Karts/bikes with save bits: always in the pool, minus whichever
         # were picked as the starting kart/bike (the pick can land on either tier)
         for name in KART_ITEMS:
-            kart = name.split(": ", 1)[1]
-            if kart == self.starting_kart:
+            if name == self.starting_kart:
                 continue
             item_pool.append(self.create_item(name))
         for name in BIKE_ITEMS:
-            bike = name.split(": ", 1)[1]
-            if bike == self.starting_bike:
+            if name == self.starting_bike:
                 continue
             item_pool.append(self.create_item(name))
 
@@ -214,15 +215,16 @@ class MKWiiWorld(World):
         # whichever were picked as the starting kart/bike
         if self.options.lock_default_vehicles.value:
             for name in DEFAULT_KART_ITEMS:
-                kart = name.split(": ", 1)[1]
-                if kart == self.starting_kart:
+                if name == self.starting_kart:
                     continue
                 item_pool.append(self.create_item(name))
             for name in DEFAULT_BIKE_ITEMS:
-                bike = name.split(": ", 1)[1]
-                if bike == self.starting_bike:
+                if name == self.starting_bike:
                     continue
                 item_pool.append(self.create_item(name))
+
+        if self.options.place_meta_late.value == 3:
+            item_pool = [item for item in item_pool if item.name not in META_ITEMS]
 
         total_locations = len(self.multiworld.get_unfilled_locations(self.player))
         needed_items = total_locations - len(item_pool)
@@ -230,7 +232,7 @@ class MKWiiWorld(World):
         if self.options.enable_item_randomization.value:
             starting = self.options.starting_items.value
             for name in POWERUP_ITEMS:
-                game_name = name.replace("Powerup: ", "", 1)
+                game_name = strip_suffix(name)
                 if game_name not in starting:
                     item_pool.append(self.create_item(name))
             needed_items = total_locations - len(item_pool)
@@ -251,7 +253,7 @@ class MKWiiWorld(World):
                 item_pool.append(self.create_filler())
         else:
             for _ in range(needed_items):
-                item_pool.append(self.create_item("Filler: Random Item"))
+                item_pool.append(self.create_item("Random Item (Filler)"))
 
         self.multiworld.itempool += item_pool
 
@@ -283,7 +285,7 @@ class MKWiiWorld(World):
     def create_filler(self) -> MKWiiItem:
         filler_weights = self._get_filler_weights()
         if not filler_weights:
-            return self.create_item("Filler: Random Item")
+            return self.create_item("Random Item (Filler)")
         names = list(filler_weights.keys())
         weights = list(filler_weights.values())
         return self.create_item(choices(names, weights=weights)[0])
@@ -304,6 +306,7 @@ class MKWiiWorld(World):
             "include_race_checks": self.options.include_race_checks.value,
             "lock_default_characters": bool(self.options.lock_default_characters.value),
             "lock_default_vehicles": bool(self.options.lock_default_vehicles.value),
+            "place_meta_late": self.options.place_meta_late.value,
             "enable_item_randomization": bool(self.options.enable_item_randomization.value),
             "enable_traps": bool(self.options.enable_traps.value),
             "starting_items": list(self.options.starting_items.value),
@@ -335,19 +338,19 @@ class MKWiiWorld(World):
 
     def _get_filler_weights(self) -> typing.Dict[str, int]:
         mapping = {
-            "Filler: Random Item": self.options.filler_weight_random.value,
-            "Filler: Mushroom": self.options.filler_weight_mushroom.value,
-            "Filler: Triple Mushroom": self.options.filler_weight_triple_mushroom.value,
-            "Filler: Golden Mushroom": self.options.filler_weight_golden_mushroom.value,
-            "Filler: Star": self.options.filler_weight_star.value,
-            "Filler: Bullet Bill": self.options.filler_weight_bullet_bill.value,
-            "Filler: Mega Mushroom": self.options.filler_weight_mega_mushroom.value,
-            "Filler: Blue Shell": self.options.filler_weight_blue_shell.value,
-            "Filler: Red Shell": self.options.filler_weight_red_shell.value,
-            "Filler: Triple Red Shell": self.options.filler_weight_triple_red_shell.value,
-            "Filler: Bob-omb": self.options.filler_weight_bob_omb.value,
-            "Filler: Lightning": self.options.filler_weight_lightning_item.value,
-            "Filler: Blooper": self.options.filler_weight_blooper.value,
-            "Filler: POW Block": self.options.filler_weight_pow_block.value,
+            "Random Item (Filler)": self.options.filler_weight_random.value,
+            "Mushroom (Filler)": self.options.filler_weight_mushroom.value,
+            "Triple Mushroom (Filler)": self.options.filler_weight_triple_mushroom.value,
+            "Golden Mushroom (Filler)": self.options.filler_weight_golden_mushroom.value,
+            "Star (Filler)": self.options.filler_weight_star.value,
+            "Bullet Bill (Filler)": self.options.filler_weight_bullet_bill.value,
+            "Mega Mushroom (Filler)": self.options.filler_weight_mega_mushroom.value,
+            "Blue Shell (Filler)": self.options.filler_weight_blue_shell.value,
+            "Red Shell (Filler)": self.options.filler_weight_red_shell.value,
+            "Triple Red Shell (Filler)": self.options.filler_weight_triple_red_shell.value,
+            "Bob-omb (Filler)": self.options.filler_weight_bob_omb.value,
+            "Lightning (Filler)": self.options.filler_weight_lightning_item.value,
+            "Blooper (Filler)": self.options.filler_weight_blooper.value,
+            "POW Block (Filler)": self.options.filler_weight_pow_block.value,
         }
         return {k: v for k, v in mapping.items() if v > 0}
