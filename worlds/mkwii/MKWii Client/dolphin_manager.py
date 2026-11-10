@@ -11,7 +11,6 @@ import logging
 import os
 import shutil
 import sys
-import Utils
 from typing import Optional
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../.."))
